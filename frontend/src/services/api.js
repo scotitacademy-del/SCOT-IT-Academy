@@ -45,6 +45,26 @@ const OWNER_DEFAULT = {
 
 /*
  * ======================================================
+ * DEFAULT TYPES
+ * ======================================================
+ *
+ * These are used only in Dummy Mode.
+ *
+ * Backend Mode:
+ * The Type Management page/database is the source.
+ */
+
+const DEFAULT_TYPES = [
+  "Students",
+  "Freshers",
+  "Experience in Non IT",
+  "Experience in IT",
+  "Career Gap",
+  "Others",
+];
+
+/*
+ * ======================================================
  * USERS
  * ======================================================
  */
@@ -221,6 +241,7 @@ export function resetWorkspaceForNewAdmin(
     "scot_it_dummy_data",
     "scot_it_notifications",
     "scot_it_admins",
+    "scot_it_types",
   ];
 
   keys.forEach((key) =>
@@ -494,7 +515,10 @@ export const authApi = {
       return response;
     }
 
-    // Dummy mode
+    /*
+     * Dummy mode
+     */
+
     ensureOwnerAccount();
 
     const users =
@@ -737,11 +761,8 @@ export const authApi = {
  */
 
 export const dashboardApi = {
-
   summary: () => {
-
     if (!useDummyData) {
-
       return api.get(
         "/dashboard/"
       );
@@ -749,26 +770,17 @@ export const dashboardApi = {
 
     return Promise.resolve({
       data: {
-
         recent:
           clone(
             dummyData.enquiries
           ).map((row) => [
-
             row.admin,
-
             row.candidate_name,
-
             row.mobile,
-
             row.city,
-
             row.category,
-
             row.course,
-
             row.next_followup_date,
-
             row.status,
           ]),
 
@@ -776,9 +788,7 @@ export const dashboardApi = {
           clone(
             dummyData.enquiries
           ).map((row) => ({
-
             ...row,
-
             name:
               row.candidate_name,
           })),
@@ -786,7 +796,6 @@ export const dashboardApi = {
         categories:
           dummyData.categories.map(
             (category) => [
-
               category,
 
               dummyData.enquiries.filter(
@@ -805,9 +814,7 @@ export const dashboardApi = {
   },
 
   notifications: () => {
-
     if (!useDummyData) {
-
       return api.get(
         "/notifications/"
       );
@@ -818,9 +825,7 @@ export const dashboardApi = {
         clone(
           dummyData.notifications
         ).map((row) => ({
-
           ...row,
-
           name:
             row.student_name,
         })),
@@ -835,7 +840,6 @@ export const dashboardApi = {
  */
 
 export const enquiryApi = {
-
   list: (params) =>
     useDummyData
       ? Promise.resolve({
@@ -849,7 +853,6 @@ export const enquiryApi = {
         ),
 
   create: (data) => {
-
     if (!useDummyData) {
       return api.post(
         "/enquiries/",
@@ -876,7 +879,6 @@ export const enquiryApi = {
   },
 
   detail: (id) => {
-
     if (!useDummyData) {
       return api.get(
         `/enquiries/${id}/`
@@ -898,7 +900,6 @@ export const enquiryApi = {
     id,
     data
   ) => {
-
     if (!useDummyData) {
       return api.patch(
         `/enquiries/${id}/`,
@@ -930,7 +931,6 @@ export const enquiryApi = {
   },
 
   remove: (id) => {
-
     if (!useDummyData) {
       return api.delete(
         `/enquiries/${id}/`
@@ -961,74 +961,108 @@ export const enquiryApi = {
  */
 
 export const studentApi = {
+  // ====================================================
+  // LIST STUDENTS
+  // ====================================================
 
-  list: (params) => {
-
+  list: (params = {}) => {
     if (!useDummyData) {
-      return api.get(
-        "/students/",
-        { params }
-      );
+      return api.get("/students/", {
+        params,
+      });
     }
 
     return Promise.resolve({
-      data: clone(
-        dummyData.students
-      ),
+      data: clone(dummyData.students),
     });
   },
+
+  // ====================================================
+  // SESSION STUDENTS
+  // ====================================================
+  // Uses the existing /students/ API.
+  //
+  // Example:
+  // /api/students/?year=2026&month=9
+  //
+  // The React page also filters joinDate locally,
+  // so this continues working even if the backend
+  // does not yet process year/month parameters.
+  // ====================================================
+
+  session: (year, month) => {
+    const selectedYear = Number(year);
+    const selectedMonth = Number(month);
+
+    if (
+      !selectedYear ||
+      !selectedMonth ||
+      selectedMonth < 1 ||
+      selectedMonth > 12
+    ) {
+      return Promise.reject(
+        new Error("Valid year and month are required.")
+      );
+    }
+
+    if (!useDummyData) {
+      return api.get("/students/", {
+        params: {
+          year: selectedYear,
+          month: selectedMonth,
+        },
+      });
+    }
+
+    const students = clone(
+      dummyData.students || []
+    );
+
+    return Promise.resolve({
+      data: students,
+    });
+  },
+
+  // ====================================================
+  // STUDENT DETAIL
+  // ====================================================
 
   detail: (id) => {
-
     if (!useDummyData) {
-      return api.get(
-        `/students/${id}/`
-      );
+      return api.get(`/students/${id}/`);
     }
 
-    const student =
-      dummyData.students.find(
-        (row) =>
-          String(row.id) ===
-          String(id)
-      );
+    const student = dummyData.students.find(
+      (row) =>
+        String(row.id) === String(id)
+    );
 
     return Promise.resolve({
-      data: clone(
-        student || {}
-      ),
+      data: clone(student || {}),
     });
   },
 
+  // ====================================================
+  // CREATE STUDENT
+  // ====================================================
+
   create: async (data) => {
-
     if (!useDummyData) {
-
       const payload = {
         ...data,
 
-        status: "Joined",
+        status: data.status || "Active",
 
         paidFee:
-          Number(
-            data?.paidFee
-          ) || 0,
+          Number(data?.paidFee) || 0,
 
         balanceFee:
-          Number(
-            data?.balanceFee
-          ) || 0,
+          Number(data?.balanceFee) || 0,
 
         totalFee:
-          Number(
-            data?.totalFee
-          ) ||
-          (Number(
-            data?.paidFee
-          ) || 0) +
-          (Number(
-            data?.balanceFee
-          ) || 0),
+          Number(data?.totalFee) ||
+          (Number(data?.paidFee) || 0) +
+            (Number(data?.balanceFee) || 0),
       };
 
       return api.post(
@@ -1038,21 +1072,14 @@ export const studentApi = {
     }
 
     const paidFee =
-      Number(
-        data?.paidFee
-      ) || 0;
+      Number(data?.paidFee) || 0;
 
     const balanceFee =
-      Number(
-        data?.balanceFee
-      ) || 0;
+      Number(data?.balanceFee) || 0;
 
     const totalFee =
-      Number(
-        data?.totalFee
-      ) ||
-      paidFee +
-      balanceFee;
+      Number(data?.totalFee) ||
+      paidFee + balanceFee;
 
     const student = {
       ...data,
@@ -1064,92 +1091,40 @@ export const studentApi = {
       status: "Joined",
 
       paidFee,
-
       balanceFee,
-
       totalFee,
     };
 
-    dummyData.students.push(
-      student
-    );
-
-    dummyData.enquiries.push({
-      id: nextId(
-        dummyData.enquiries
-      ),
-
-      admin:
-        data?.admin ||
-        "Admin",
-
-      candidate_name:
-        student.name || "",
-
-      mobile:
-        student.mobile || "",
-
-      city:
-        student.city || "",
-
-      category:
-        student.category || "",
-
-      course:
-        student.course || "",
-
-      status: "Joined",
-
-      next_followup_date:
-        student.dueDate ||
-        student.due_date ||
-        "",
-
-      comments:
-        "Added from Students page.",
-    });
+    dummyData.students.push(student);
 
     persistDummyData();
 
     return Promise.resolve({
-      data: clone(
-        student
-      ),
+      data: clone(student),
     });
   },
 
-  update: async (
-    id,
-    data
-  ) => {
+  // ====================================================
+  // UPDATE STUDENT
+  // ====================================================
 
+  update: async (id, data) => {
     if (!useDummyData) {
-
       const payload = {
         ...data,
 
-        status: "Joined",
+        status: data.status || "Active",
 
         paidFee:
-          Number(
-            data?.paidFee
-          ) || 0,
+          Number(data?.paidFee) || 0,
 
         balanceFee:
-          Number(
-            data?.balanceFee
-          ) || 0,
+          Number(data?.balanceFee) || 0,
 
         totalFee:
-          Number(
-            data?.totalFee
-          ) ||
-          (Number(
-            data?.paidFee
-          ) || 0) +
-          (Number(
-            data?.balanceFee
-          ) || 0),
+          Number(data?.totalFee) ||
+          (Number(data?.paidFee) || 0) +
+            (Number(data?.balanceFee) || 0),
       };
 
       return api.patch(
@@ -1167,33 +1142,22 @@ export const studentApi = {
 
     if (index === -1) {
       return Promise.reject(
-        new Error(
-          "Student not found."
-        )
+        new Error("Student not found.")
       );
     }
 
     const oldStudent =
-      dummyData.students[
-        index
-      ];
+      dummyData.students[index];
 
     const paidFee =
-      Number(
-        data?.paidFee
-      ) || 0;
+      Number(data?.paidFee) || 0;
 
     const balanceFee =
-      Number(
-        data?.balanceFee
-      ) || 0;
+      Number(data?.balanceFee) || 0;
 
     const totalFee =
-      Number(
-        data?.totalFee
-      ) ||
-      paidFee +
-      balanceFee;
+      Number(data?.totalFee) ||
+      paidFee + balanceFee;
 
     const updatedStudent = {
       ...oldStudent,
@@ -1204,97 +1168,30 @@ export const studentApi = {
       status: "Joined",
 
       paidFee,
-
       balanceFee,
-
       totalFee,
     };
 
-    dummyData.students[
-      index
-    ] = updatedStudent;
-
-    const enquiryIndex =
-      dummyData.enquiries.findIndex(
-        (row) =>
-          String(
-            row.candidate_name ||
-              ""
-          ).trim()
-            .toLowerCase() ===
-            String(
-              oldStudent.name ||
-                ""
-            ).trim()
-              .toLowerCase() &&
-          String(
-            row.mobile || ""
-          ) ===
-            String(
-              oldStudent.mobile ||
-                ""
-            )
-      );
-
-    if (
-      enquiryIndex >= 0
-    ) {
-
-      dummyData.enquiries[
-        enquiryIndex
-      ] = {
-
-        ...dummyData.enquiries[
-          enquiryIndex
-        ],
-
-        candidate_name:
-          updatedStudent.name,
-
-        mobile:
-          updatedStudent.mobile,
-
-        city:
-          updatedStudent.city,
-
-        category:
-          updatedStudent.category,
-
-        course:
-          updatedStudent.course,
-
-        status: "Joined",
-
-        next_followup_date:
-          updatedStudent.dueDate ||
-          updatedStudent.due_date ||
-          "",
-      };
-    }
+    dummyData.students[index] =
+      updatedStudent;
 
     persistDummyData();
 
     return Promise.resolve({
-      data: clone(
-        updatedStudent
-      ),
+      data: clone(updatedStudent),
     });
   },
 
-  delete: (id) => {
+  // ====================================================
+  // DELETE STUDENT
+  // ====================================================
 
+  delete: (id) => {
     if (!useDummyData) {
       return api.delete(
         `/students/${id}/`
       );
     }
-
-    const student =
-      dummyData.students.find(
-        (row) =>
-          String(row.id) ===
-          String(id)
-      );
 
     dummyData.students =
       dummyData.students.filter(
@@ -1303,33 +1200,6 @@ export const studentApi = {
           String(id)
       );
 
-    if (student) {
-
-      dummyData.enquiries =
-        dummyData.enquiries.filter(
-          (row) =>
-            !(
-              String(
-                row.candidate_name ||
-                  ""
-              ).trim()
-                .toLowerCase() ===
-                String(
-                  student.name ||
-                    ""
-                ).trim()
-                  .toLowerCase() &&
-              String(
-                row.mobile || ""
-              ) ===
-                String(
-                  student.mobile ||
-                    ""
-                )
-            )
-        );
-    }
-
     persistDummyData();
 
     return Promise.resolve({
@@ -1337,6 +1207,32 @@ export const studentApi = {
         deleted: true,
       },
     });
+  },
+
+  // ====================================================
+  // NEXT STUDENT ID
+  // ====================================================
+  // Returns the next available Student ID (e.g. SCT001)
+  // ====================================================
+
+  nextId: () => {
+    if (!useDummyData) {
+      return api.get("/students/next-id/");
+    }
+
+    // Dummy mode: calculate from local students
+    const students = dummyData.students || [];
+    let maxNum = 0;
+    students.forEach((s) => {
+      const sid = String(s.studentId || s.student_id || s.id || "");
+      const match = sid.match(/^SCT(\d+)$/i);
+      if (match) {
+        maxNum = Math.max(maxNum, parseInt(match[1], 10));
+      }
+    });
+    const nextNum = maxNum + 1;
+    const nextStudentId = `SCT${String(nextNum).padStart(3, "0")}`;
+    return Promise.resolve({ data: { nextId: nextStudentId } });
   },
 };
 
@@ -1350,9 +1246,7 @@ const localEnquiryKey =
   "scot_it_enquiries";
 
 export function getLocalEnquiries() {
-
   try {
-
     const rows =
       JSON.parse(
         localStorage.getItem(
@@ -1377,18 +1271,14 @@ export function getLocalEnquiries() {
             }
           : row
     );
-
   } catch {
-
     return [];
-
   }
 }
 
 export function saveLocalEnquiry(
   enquiry
 ) {
-
   const rows =
     getLocalEnquiries();
 
@@ -1419,7 +1309,6 @@ export function saveLocalEnquiry(
 export function removeLocalEnquiry(
   id
 ) {
-
   const rows =
     getLocalEnquiries().filter(
       (row) =>
@@ -1440,26 +1329,20 @@ export function removeLocalEnquiry(
  */
 
 export function getLocalCategories() {
-
   try {
-
     return JSON.parse(
       localStorage.getItem(
         "scot_it_categories"
       ) || "[]"
     );
-
   } catch {
-
     return [];
-
   }
 }
 
 export function saveLocalCategory(
   name
 ) {
-
   const categories =
     getLocalCategories();
 
@@ -1468,7 +1351,6 @@ export function saveLocalCategory(
       name
     )
   ) {
-
     localStorage.setItem(
       "scot_it_categories",
       JSON.stringify([
@@ -1483,7 +1365,6 @@ export function renameLocalCategory(
   previous,
   next
 ) {
-
   const categories =
     getLocalCategories().map(
       (name) =>
@@ -1503,7 +1384,6 @@ export function renameLocalCategory(
 export function removeLocalCategory(
   name
 ) {
-
   localStorage.setItem(
     "scot_it_categories",
     JSON.stringify(
@@ -1516,9 +1396,7 @@ export function removeLocalCategory(
 }
 
 export const categoryApi = {
-
   list: () => {
-
     if (!useDummyData) {
       return api.get(
         "/categories/"
@@ -1536,7 +1414,6 @@ export const categoryApi = {
   },
 
   create: (data) => {
-
     if (!useDummyData) {
       return api.post(
         "/categories/",
@@ -1549,7 +1426,6 @@ export const categoryApi = {
         data.name
       )
     ) {
-
       dummyData.categories.push(
         data.name
       );
@@ -1569,7 +1445,6 @@ export const categoryApi = {
     id,
     data
   ) => {
-
     if (!useDummyData) {
       return api.patch(
         `/categories/${id}/`,
@@ -1584,7 +1459,6 @@ export const categoryApi = {
       );
 
     if (index >= 0) {
-
       dummyData.categories[
         index
       ] = data.name;
@@ -1601,7 +1475,6 @@ export const categoryApi = {
   },
 
   remove: (id) => {
-
     if (!useDummyData) {
       return api.delete(
         `/categories/${id}/`
@@ -1626,12 +1499,316 @@ export const categoryApi = {
 
 /*
  * ======================================================
+ * TYPE API
+ * ======================================================
+ *
+ * IMPORTANT:
+ *
+ * Backend endpoints expected:
+ *
+ * GET    /api/types/
+ * POST   /api/types/
+ * PATCH  /api/types/<id>/
+ * DELETE /api/types/<id>/
+ *
+ * Backend response expected:
+ *
+ * [
+ *   {
+ *     "id": 1,
+ *     "name": "Experience"
+ *   }
+ * ]
+ *
+ * OR:
+ *
+ * {
+ *   "results": [
+ *     {
+ *       "id": 1,
+ *       "name": "Experience"
+ *     }
+ *   ]
+ * }
+ *
+ */
+
+
+
+const getLocalTypes = () => {
+  try {
+    const saved =
+      JSON.parse(
+        localStorage.getItem(
+          "scot_it_types"
+        ) || "null"
+      );
+
+    if (
+      Array.isArray(saved) &&
+      saved.length > 0
+    ) {
+      return saved;
+    }
+
+    const initialTypes =
+      DEFAULT_TYPES.map(
+        (name, index) => ({
+          id: index + 1,
+          name,
+        })
+      );
+
+    localStorage.setItem(
+      "scot_it_types",
+      JSON.stringify(
+        initialTypes
+      )
+    );
+
+    return initialTypes;
+  } catch {
+    return DEFAULT_TYPES.map(
+      (name, index) => ({
+        id: index + 1,
+        name,
+      })
+    );
+  }
+};
+
+const saveLocalTypes = (
+  types
+) => {
+  localStorage.setItem(
+    "scot_it_types",
+    JSON.stringify(types)
+  );
+};
+
+export const typeApi = {
+  /*
+   * Get all types
+   */
+  list: async () => {
+    if (!useDummyData) {
+      const response =
+        await api.get(
+          "/types/"
+        );
+
+      /*
+       * Supports both:
+       *
+       * [
+       *   {...}
+       * ]
+       *
+       * and:
+       *
+       * {
+       *   results: [...]
+       * }
+       */
+
+      const data =
+        Array.isArray(
+          response.data
+        )
+          ? response.data
+          : Array.isArray(
+              response.data?.results
+            )
+          ? response.data.results
+          : [];
+
+      return {
+        ...response,
+        data,
+      };
+    }
+
+    return Promise.resolve({
+      data: clone(
+        getLocalTypes()
+      ),
+    });
+  },
+
+  /*
+   * Create new type
+   */
+  create: async (
+    data = {}
+  ) => {
+    const name =
+      String(
+        data?.name || ""
+      ).trim();
+
+    if (!name) {
+      throw new Error(
+        "Type name is required."
+      );
+    }
+
+    if (!useDummyData) {
+      return api.post(
+        "/types/",
+        {
+          name,
+        }
+      );
+    }
+
+    const types =
+      getLocalTypes();
+
+    const exists =
+      types.some(
+        (item) =>
+          String(
+            item.name || ""
+          )
+            .trim()
+            .toLowerCase() ===
+          name.toLowerCase()
+      );
+
+    if (exists) {
+      throw new Error(
+        "This type already exists."
+      );
+    }
+
+    const newType = {
+      id: nextId(types),
+      name,
+    };
+
+    types.push(newType);
+
+    saveLocalTypes(types);
+
+    return Promise.resolve({
+      data: clone(newType),
+    });
+  },
+
+  /*
+   * Update existing type
+   */
+  update: async (
+    id,
+    data = {}
+  ) => {
+    const name =
+      String(
+        data?.name || ""
+      ).trim();
+
+    if (!name) {
+      throw new Error(
+        "Type name is required."
+      );
+    }
+
+    if (!useDummyData) {
+      return api.patch(
+        `/types/${id}/`,
+        {
+          name,
+        }
+      );
+    }
+
+    const types =
+      getLocalTypes();
+
+    const index =
+      types.findIndex(
+        (item) =>
+          String(item.id) ===
+          String(id)
+      );
+
+    if (index === -1) {
+      throw new Error(
+        "Type not found."
+      );
+    }
+
+    const duplicate =
+      types.some(
+        (item, itemIndex) =>
+          itemIndex !== index &&
+          String(
+            item.name || ""
+          )
+            .trim()
+            .toLowerCase() ===
+            name.toLowerCase()
+      );
+
+    if (duplicate) {
+      throw new Error(
+        "This type already exists."
+      );
+    }
+
+    types[index] = {
+      ...types[index],
+      name,
+    };
+
+    saveLocalTypes(types);
+
+    return Promise.resolve({
+      data: clone(
+        types[index]
+      ),
+    });
+  },
+
+  /*
+   * Delete type
+   */
+  remove: async (
+    id
+  ) => {
+    if (!useDummyData) {
+      return api.delete(
+        `/types/${id}/`
+      );
+    }
+
+    const types =
+      getLocalTypes();
+
+    const updated =
+      types.filter(
+        (item) =>
+          String(item.id) !==
+          String(id)
+      );
+
+    saveLocalTypes(updated);
+
+    return Promise.resolve({
+      data: {
+        deleted: true,
+      },
+    });
+  },
+};
+
+/*
+ * ======================================================
  * FOLLOW UP API
  * ======================================================
  */
 
 export const followUpApi = {
-
   list: (params) =>
     useDummyData
       ? Promise.resolve({
@@ -1652,7 +1829,6 @@ export const followUpApi = {
  */
 
 export const reportApi = {
-
   summary: (params) =>
     api.get(
       "/reports/",
@@ -1667,9 +1843,7 @@ export const reportApi = {
  */
 
 export const adminApi = {
-
   list: () => {
-
     if (!useDummyData) {
       return api.get(
         "/admins/"
@@ -1718,7 +1892,6 @@ export const adminApi = {
   },
 
   create: (data) => {
-
     if (!useDummyData) {
       return api.post(
         "/admins/",
@@ -1803,7 +1976,6 @@ export const adminApi = {
     id,
     data
   ) => {
-
     if (!useDummyData) {
       return api.patch(
         `/admins/${id}/`,
@@ -1883,7 +2055,6 @@ export const adminApi = {
   },
 
   remove: (id) => {
-
     if (!useDummyData) {
       return api.delete(
         `/admins/${id}/`
@@ -1939,13 +2110,9 @@ export const adminApi = {
  */
 
 export const referralApi = {
-
   list: () => {
-
     if (useDummyData) {
-
       try {
-
         const rows =
           JSON.parse(
             localStorage.getItem(
@@ -1956,13 +2123,10 @@ export const referralApi = {
         return Promise.resolve({
           data: clone(rows),
         });
-
       } catch {
-
         return Promise.resolve({
           data: [],
         });
-
       }
     }
 
@@ -1972,9 +2136,7 @@ export const referralApi = {
   },
 
   create: (data) => {
-
     if (useDummyData) {
-
       const rows =
         JSON.parse(
           localStorage.getItem(
@@ -2010,9 +2172,7 @@ export const referralApi = {
     id,
     data
   ) => {
-
     if (useDummyData) {
-
       const rows =
         JSON.parse(
           localStorage.getItem(
@@ -2028,7 +2188,6 @@ export const referralApi = {
         );
 
       if (index >= 0) {
-
         rows[index] = {
           ...rows[index],
           ...data,
@@ -2071,9 +2230,7 @@ export const referralApi = {
   },
 
   remove: (id) => {
-
     if (useDummyData) {
-
       const rows =
         JSON.parse(
           localStorage.getItem(
@@ -2113,7 +2270,6 @@ export const referralApi = {
  */
 
 export const settingsApi = {
-
   get: () =>
     api.get(
       "/settings/"

@@ -1,4 +1,5 @@
 import React, {
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -8,7 +9,6 @@ import { Link } from "react-router-dom";
 
 import {
   enquiryApi,
-  categoryApi,
   studentApi,
 } from "../services/api";
 
@@ -20,22 +20,35 @@ import {
 } from "../components/Ui";
 
 // ======================================================
-// DEFAULT CATEGORIES
-// ======================================================
-
-const defaultCategories = [];
-
-// ======================================================
 // STATUS HELPER
 // ======================================================
 
 function statusOf(row = {}) {
   return String(
-    row.status ||
-      row.final_status ||
-      row.finalStatus ||
+    row.status ??
+      row.final_status ??
+      row.finalStatus ??
       "Pending"
   ).trim();
+}
+
+// ======================================================
+// NORMALIZED STATUS
+// ======================================================
+
+function normalizedStatus(row = {}) {
+  return statusOf(row)
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// ======================================================
+// COMPLETED STATUS CHECK
+// ======================================================
+
+function isCompleted(row = {}) {
+  return normalizedStatus(row) === "completed";
 }
 
 // ======================================================
@@ -45,9 +58,23 @@ function statusOf(row = {}) {
 function keyOf(row = {}) {
   return (
     row.mobile ||
+    row.mobile_no ||
+    row.phone ||
     row.id ||
-    `${row.candidate_name || row.name || ""}-${row.course || ""}`
+    `${row.candidate_name || row.name || ""}-${
+      row.course || row.course_name || ""
+    }`
   );
+}
+
+// ======================================================
+// NORMALIZE MOBILE
+// ======================================================
+
+function normalizeMobile(value) {
+  return String(value || "")
+    .replace(/\D/g, "")
+    .slice(-10);
 }
 
 // ======================================================
@@ -76,43 +103,12 @@ function categoryOf(value) {
 }
 
 // ======================================================
-// NORMALIZE CATEGORY NAME
-// ======================================================
-
-function normalizeCategoryName(value) {
-  return String(value || "")
-    .trim()
-    .replace(/\s+/g, " ")
-    .toLowerCase();
-}
-
-// ======================================================
-// UNIQUE CATEGORIES
-// ======================================================
-
-function uniqueCategories(list = []) {
-  const map = new Map();
-
-  list.forEach((item) => {
-    const name = categoryOf(item);
-
-    if (!name || name === "Other") {
-      return;
-    }
-
-    const key =
-      normalizeCategoryName(name);
-
-    if (!map.has(key)) {
-      map.set(key, name);
-    }
-  });
-
-  return Array.from(map.values());
-}
-
-// ======================================================
 // DATE HELPER
+// Supports:
+// YYYY-MM-DD
+// DD/MM/YYYY
+// DD-MM-YYYY
+// ISO date
 // ======================================================
 
 function getDateValue(value) {
@@ -120,9 +116,61 @@ function getDateValue(value) {
     return null;
   }
 
-  const date = new Date(value);
+  if (value instanceof Date) {
+    return Number.isNaN(
+      value.getTime()
+    )
+      ? null
+      : value;
+  }
 
-  if (Number.isNaN(date.getTime())) {
+  const stringValue =
+    String(value).trim();
+
+  if (!stringValue) {
+    return null;
+  }
+
+  const indianDateMatch =
+    stringValue.match(
+      /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/
+    );
+
+  if (indianDateMatch) {
+    const day = Number(
+      indianDateMatch[1]
+    );
+
+    const month =
+      Number(indianDateMatch[2]) - 1;
+
+    const year = Number(
+      indianDateMatch[3]
+    );
+
+    const date = new Date(
+      year,
+      month,
+      day
+    );
+
+    if (
+      date.getFullYear() === year &&
+      date.getMonth() === month &&
+      date.getDate() === day
+    ) {
+      return date;
+    }
+  }
+
+  const date =
+    new Date(stringValue);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
     return null;
   }
 
@@ -130,89 +178,327 @@ function getDateValue(value) {
 }
 
 // ======================================================
+// NUMBER / MONEY HELPER
+// ======================================================
+
+function getNumberValue(value) {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return 0;
+  }
+
+  if (
+    typeof value === "number"
+  ) {
+    return Number.isFinite(value)
+      ? value
+      : 0;
+  }
+
+  const cleaned = String(value)
+    .replace(/₹/g, "")
+    .replace(/,/g, "")
+    .replace(/\s/g, "")
+    .trim();
+
+  const number =
+    Number(cleaned);
+
+  return Number.isFinite(number)
+    ? number
+    : 0;
+}
+
+// ======================================================
+// GET PAID FEE
+// ======================================================
+
+function getPaidFee(student = {}) {
+  const possibleValues = [
+    student.paidFee,
+    student.paid_fee,
+    student.paid,
+    student.amount_paid,
+    student.payment_amount,
+    student.paymentAmount,
+    student.fee_paid,
+    student.feePaid,
+    student.paid_amount,
+    student.paidAmount,
+    student.amount,
+    student.advance_paid,
+    student.advancePaid,
+    student.total_paid,
+    student.totalPaid,
+  ];
+
+  for (
+    const value of possibleValues
+  ) {
+    if (
+      value !== undefined &&
+      value !== null &&
+      value !== ""
+    ) {
+      return getNumberValue(
+        value
+      );
+    }
+  }
+
+  return 0;
+}
+
+// ======================================================
+// GET BALANCE FEE
+// ======================================================
+
+function getBalanceFee(student = {}) {
+  const possibleValues = [
+    student.balanceFee,
+    student.balance_fee,
+    student.balance,
+    student.remaining_fee,
+    student.remainingFee,
+    student.pending_fee,
+    student.pendingFee,
+    student.amount_remaining,
+    student.amountRemaining,
+  ];
+
+  for (
+    const value of possibleValues
+  ) {
+    if (
+      value !== undefined &&
+      value !== null &&
+      value !== ""
+    ) {
+      return getNumberValue(
+        value
+      );
+    }
+  }
+
+  return 0;
+}
+
+// ======================================================
+// GET TOTAL FEE
+// ======================================================
+
+function getTotalFee(
+  student = {},
+  paidFee = 0,
+  balanceFee = 0
+) {
+  const possibleValues = [
+    student.totalFee,
+    student.total_fee,
+    student.course_fee,
+    student.courseFee,
+    student.total_amount,
+    student.totalAmount,
+    student.fee,
+    student.fees,
+  ];
+
+  for (
+    const value of possibleValues
+  ) {
+    if (
+      value !== undefined &&
+      value !== null &&
+      value !== ""
+    ) {
+      const number =
+        getNumberValue(value);
+
+      if (number > 0) {
+        return number;
+      }
+    }
+  }
+
+  return (
+    paidFee + balanceFee
+  );
+}
+
+// ======================================================
+// GET NAME
+// ======================================================
+
+function getName(row = {}) {
+  return (
+    row.name ||
+    row.candidate_name ||
+    row.student_name ||
+    row.studentName ||
+    ""
+  );
+}
+
+// ======================================================
+// GET MOBILE
+// ======================================================
+
+function getMobile(row = {}) {
+  return (
+    row.mobile ||
+    row.mobile_no ||
+    row.phone ||
+    row.contact_number ||
+    row.contactNumber ||
+    ""
+  );
+}
+
+// ======================================================
+// GET CATEGORY
+// ======================================================
+
+function getCategory(row = {}) {
+  return (
+    row.category ||
+    row.category_name ||
+    row.categoryName ||
+    ""
+  );
+}
+
+// ======================================================
+// GET COURSE
+// ======================================================
+
+function getCourse(row = {}) {
+  return (
+    row.course ||
+    row.course_name ||
+    row.courseName ||
+    ""
+  );
+}
+
+// ======================================================
+// GET JOIN DATE
+// ======================================================
+
+function getJoinDate(row = {}) {
+  return (
+    row.joinDate ||
+    row.join_date ||
+    row.joiningDate ||
+    row.joining_date ||
+    row.joined_date ||
+    row.completed_date ||
+    row.completion_date ||
+    row.date ||
+    row.created_at ||
+    row.createdAt ||
+    null
+  );
+}
+
+// ======================================================
+// GET PAYMENT DATE
+// ======================================================
+
+function getPaymentDate(row = {}) {
+  return (
+    row.paymentDate ||
+    row.payment_date ||
+    row.paidDate ||
+    row.paid_date ||
+    row.feeDate ||
+    row.fee_date ||
+    row.paymentDateTime ||
+    row.payment_datetime ||
+    row.payment_date_time ||
+    row.paid_on ||
+    row.paidOn ||
+    row.completed_date ||
+    row.completion_date ||
+    row.created_at ||
+    row.createdAt ||
+    getJoinDate(row) ||
+    null
+  );
+}
+
+// ======================================================
+// GET DUE DATE
+// ======================================================
+
+function getDueDate(row = {}) {
+  return (
+    row.dueDate ||
+    row.due_date ||
+    row.feeDueDate ||
+    row.fee_due_date ||
+    row.paymentDueDate ||
+    row.payment_due_date ||
+    row.balanceDueDate ||
+    row.balance_due_date ||
+    row.nextPaymentDate ||
+    row.next_payment_date ||
+    row.nextDueDate ||
+    row.next_due_date ||
+    row.fee_due ||
+    null
+  );
+}
+
+// ======================================================
 // NORMALIZE STUDENT
 // ======================================================
 
-function normalizeStudent(student = {}) {
+function normalizeStudent(
+  student = {}
+) {
   const paidFee =
-    Number(
-      student.paidFee ??
-        student.paid_fee ??
-        student.paid ??
-        student.amount_paid ??
-        student.payment_amount ??
-        0
-    ) || 0;
+    getPaidFee(student);
 
   const balanceFee =
-    Number(
-      student.balanceFee ??
-        student.balance_fee ??
-        student.balance ??
-        student.remaining_fee ??
-        0
-    ) || 0;
+    getBalanceFee(student);
 
   const totalFee =
-    Number(
-      student.totalFee ??
-        student.total_fee ??
-        student.course_fee ??
-        student.total_amount ??
-        0
-    ) || paidFee + balanceFee;
+    getTotalFee(
+      student,
+      paidFee,
+      balanceFee
+    );
 
   const joinDate =
-    student.joinDate ||
-    student.join_date ||
-    student.joiningDate ||
-    student.joining_date ||
-    student.date ||
-    student.created_at ||
-    null;
+    getJoinDate(student);
 
   const paymentDate =
-    student.paymentDate ||
-    student.payment_date ||
-    student.paidDate ||
-    student.paid_date ||
-    student.feeDate ||
-    student.fee_date ||
-    student.paymentDateTime ||
-    student.payment_datetime ||
-    student.created_at ||
-    joinDate ||
-    null;
+    getPaymentDate(student);
+
+  const dueDate =
+    getDueDate(student);
 
   return {
     ...student,
 
     id: student.id,
 
-    name:
-      student.name ||
-      student.candidate_name ||
-      student.student_name ||
-      "",
+    name: getName(student),
 
-    mobile:
-      student.mobile ||
-      student.mobile_no ||
-      student.phone ||
-      "",
+    mobile: getMobile(student),
 
     city:
-      student.city || "",
+      student.city ||
+      "",
 
     category:
-      student.category ||
-      student.category_name ||
-      "",
+      getCategory(student),
 
     course:
-      student.course ||
-      student.course_name ||
-      "",
+      getCourse(student),
 
     paidFee,
 
@@ -220,16 +506,15 @@ function normalizeStudent(student = {}) {
 
     totalFee,
 
+    dueDate,
+
     joinDate,
 
     paymentDate,
 
-    status: String(
-      student.status ||
-        student.final_status ||
-        student.finalStatus ||
-        "Joined"
-    ).trim(),
+    status: statusOf(
+      student
+    ),
   };
 }
 
@@ -248,9 +533,11 @@ function isWithinLastDays(
     return false;
   }
 
-  const now = new Date();
+  const now =
+    new Date();
 
-  const today = new Date();
+  const today =
+    new Date();
 
   today.setHours(
     0,
@@ -274,6 +561,34 @@ function isWithinLastDays(
 }
 
 // ======================================================
+// FORMAT DATE
+// ======================================================
+
+function formatDate(value) {
+  const date =
+    getDateValue(value);
+
+  if (!date) {
+    return "-";
+  }
+
+  const day =
+    String(
+      date.getDate()
+    ).padStart(2, "0");
+
+  const month =
+    String(
+      date.getMonth() + 1
+    ).padStart(2, "0");
+
+  const year =
+    date.getFullYear();
+
+  return `${day}/${month}/${year}`;
+}
+
+// ======================================================
 // DASHBOARD
 // ======================================================
 
@@ -285,9 +600,6 @@ export default function Dashboard() {
 
   const [rows, setRows] =
     useState([]);
-
-  const [categories, setCategories] =
-    useState(defaultCategories);
 
   const [query, setQuery] =
     useState("");
@@ -314,12 +626,14 @@ export default function Dashboard() {
   // ====================================================
 
   useEffect(() => {
+
     const checkYear = () => {
+
       const year =
         new Date().getFullYear();
 
       setCurrentYear(
-        (previousYear) =>
+        previousYear =>
           previousYear === year
             ? previousYear
             : year
@@ -335,6 +649,7 @@ export default function Dashboard() {
     return () => {
       clearInterval(timer);
     };
+
   }, []);
 
   // ====================================================
@@ -342,198 +657,252 @@ export default function Dashboard() {
   // ====================================================
 
   const loadDashboardData =
-    async () => {
+    useCallback(
+      async (
+        showLoader = true
+      ) => {
 
-      setLoading(true);
+        if (showLoader) {
+          setLoading(true);
+        }
 
-      try {
+        try {
 
-        const [
-          enquiryResponse,
-          categoryResponse,
-          studentResponse,
-        ] = await Promise.all([
-          enquiryApi.list(),
-          categoryApi.list(),
-          studentApi.list(),
-        ]);
+          const [
+            enquiryResponse,
+            studentResponse,
+          ] = await Promise.all([
+            enquiryApi.list(),
+            studentApi.list(),
+          ]);
 
-        // ==================================================
-        // ENQUIRIES
-        // ==================================================
+          // ==================================================
+          // ENQUIRIES
+          // ==================================================
 
-        const enquiryIncoming =
-          enquiryResponse?.data
-            ?.results ||
-          enquiryResponse?.data ||
-          [];
+          const enquiryIncoming =
+            enquiryResponse?.data
+              ?.results ||
+            enquiryResponse?.data ||
+            [];
 
-        const enquiryList =
-          Array.isArray(
-            enquiryIncoming
-          )
-            ? enquiryIncoming
-            : [];
+          const enquiryList =
+            Array.isArray(
+              enquiryIncoming
+            )
+              ? enquiryIncoming
+              : [];
 
-        const uniqueEnquiries =
-          new Map();
+          const uniqueEnquiries =
+            new Map();
 
-        enquiryList.forEach(
-          (row) => {
-
-            uniqueEnquiries.set(
-              String(
-                keyOf(row)
-              ),
-              row
-            );
-
-          }
-        );
-
-        setRows(
-          Array.from(
-            uniqueEnquiries.values()
-          )
-        );
-
-        // ==================================================
-        // CATEGORIES
-        // ==================================================
-
-        const categoryIncoming =
-          categoryResponse?.data
-            ?.results ||
-          categoryResponse?.data ||
-          [];
-
-        const categoryNames =
-          Array.isArray(
-            categoryIncoming
-          )
-            ? categoryIncoming
-                .map(
-                  (item) =>
-                    typeof item ===
-                    "string"
-                      ? item
-                      : item?.name
-                )
-                .filter(Boolean)
-            : [];
-
-        setCategories(
-          uniqueCategories([
-            ...defaultCategories,
-            ...categoryNames,
-          ])
-        );
-
-        // ==================================================
-        // STUDENTS
-        // ==================================================
-
-        const studentIncoming =
-          studentResponse?.data
-            ?.results ||
-          studentResponse?.data ||
-          [];
-
-        const studentList =
-          Array.isArray(
-            studentIncoming
-          )
-            ? studentIncoming
-            : [];
-
-        const uniqueStudents =
-          new Map();
-
-        studentList.forEach(
-          (student) => {
-
-            const normalized =
-              normalizeStudent(
-                student
+          enquiryList.forEach(
+            row => {
+              uniqueEnquiries.set(
+                String(
+                  keyOf(row)
+                ),
+                row
               );
+            }
+          );
 
-            const key =
-              normalized.id ||
-              normalized.mobile ||
-              `${normalized.name}-${normalized.course}`;
+          setRows(
+            Array.from(
+              uniqueEnquiries.values()
+            )
+          );
 
-            uniqueStudents.set(
-              String(key),
-              normalized
-            );
+          // ==================================================
+          // STUDENTS
+          // ==================================================
 
+          const studentIncoming =
+            studentResponse?.data
+              ?.results ||
+            studentResponse?.data ||
+            [];
+
+          const studentList =
+            Array.isArray(
+              studentIncoming
+            )
+              ? studentIncoming
+              : [];
+
+          const uniqueStudents =
+            new Map();
+
+          studentList.forEach(
+            student => {
+
+              const normalized =
+                normalizeStudent(
+                  student
+                );
+
+              const key =
+                normalized.id ||
+                normalizeMobile(
+                  normalized.mobile
+                ) ||
+                `${normalized.name}-${normalized.course}`;
+
+              uniqueStudents.set(
+                String(key),
+                normalized
+              );
+            }
+          );
+
+          setStudents(
+            Array.from(
+              uniqueStudents.values()
+            )
+          );
+
+        } catch (error) {
+
+          console.error(
+            "Dashboard data loading error:",
+            error
+          );
+
+          if (showLoader) {
+            setRows([]);
+            setStudents([]);
           }
-        );
 
-        setStudents(
-          Array.from(
-            uniqueStudents.values()
-          )
-        );
+        } finally {
 
-      } catch (error) {
+          if (showLoader) {
+            setLoading(false);
+          }
 
-        console.error(
-          "Dashboard data loading error:",
-          error
-        );
+        }
 
-        setRows([]);
-        setStudents([]);
-
-      } finally {
-
-        setLoading(false);
-
-      }
-    };
+      },
+      []
+    );
 
   // ====================================================
-  // LOAD DASHBOARD
+  // INITIAL LOAD
   // ====================================================
 
   useEffect(() => {
-    loadDashboardData();
-  }, []);
+
+    loadDashboardData(true);
+
+  }, [
+    loadDashboardData,
+  ]);
+
+  // ====================================================
+  // AUTO REFRESH DASHBOARD
+  // ====================================================
+
+  useEffect(() => {
+
+    const handleFocus = () => {
+      loadDashboardData(false);
+    };
+
+    const handleVisibilityChange =
+      () => {
+
+        if (
+          document.visibilityState ===
+          "visible"
+        ) {
+          loadDashboardData(false);
+        }
+      };
+
+    window.addEventListener(
+      "focus",
+      handleFocus
+    );
+
+    document.addEventListener(
+      "visibilitychange",
+      handleVisibilityChange
+    );
+
+    const refreshTimer =
+      setInterval(
+        () => {
+
+          if (
+            document.visibilityState ===
+            "visible"
+          ) {
+            loadDashboardData(false);
+          }
+
+        },
+        30000
+      );
+
+    return () => {
+
+      window.removeEventListener(
+        "focus",
+        handleFocus
+      );
+
+      document.removeEventListener(
+        "visibilitychange",
+        handleVisibilityChange
+      );
+
+      clearInterval(
+        refreshTimer
+      );
+
+    };
+
+  }, [
+    loadDashboardData,
+  ]);
 
   // ====================================================
   // ENQUIRY DATA
   // ====================================================
 
-  const currentRows = rows;
+  const currentRows =
+    rows;
+
+  // ====================================================
+  // FILTERED ENQUIRIES
+  // ====================================================
 
   const filtered =
     currentRows.filter(
-      (row) => {
+      row => {
 
         const searchText = `
-          ${row.candidate_name || row.name || ""}
-          ${row.mobile || ""}
+          ${getName(row)}
+          ${getMobile(row)}
           ${row.city || ""}
         `.toLowerCase();
 
         const rowStatus =
-          statusOf(
-            row
-          ).toLowerCase();
+          normalizedStatus(row);
 
-        const isJoined =
+        const isCompletedRow =
           rowStatus ===
-          "joined";
+          "completed";
 
         return (
           searchText.includes(
             query.toLowerCase()
           ) &&
-          (!status ||
+          (
+            !status ||
             rowStatus ===
-              status.toLowerCase()) &&
-          !isJoined
+              status.toLowerCase()
+          ) &&
+          !isCompletedRow
         );
       }
     );
@@ -549,33 +918,21 @@ export default function Dashboard() {
     );
 
   // ====================================================
-  // TOTAL ENQUIRIES
-  // ====================================================
-
-  const totalEnquiries =
-    currentRows.filter(
-      (row) =>
-        statusOf(
-          row
-        ).toLowerCase() !==
-        "joined"
-    ).length;
-
-  // ====================================================
   // ENQUIRY COUNT
   // ====================================================
 
   const enquiryCount =
-    (value) => {
+    value => {
 
       return currentRows.filter(
-        (row) =>
-          statusOf(
+        row =>
+          normalizedStatus(
             row
-          ).toLowerCase() ===
-          value.toLowerCase()
+          ) ===
+          value
+            .toLowerCase()
+            .trim()
       ).length;
-
     };
 
   // ====================================================
@@ -592,274 +949,533 @@ export default function Dashboard() {
     }, [students]);
 
   // ====================================================
-  // JOINED STUDENTS
+  // COMPLETED ENQUIRIES
   // ====================================================
 
-  const joinedStudents =
+  const completedEnquiries =
     useMemo(() => {
 
-      return studentEntries.filter(
-        (student) =>
-          String(
-            student.status
-          )
-            .trim()
-            .toLowerCase() ===
-          "joined"
+      return currentRows.filter(
+        row =>
+          isCompleted(row)
       );
 
-    }, [studentEntries]);
+    }, [currentRows]);
 
   // ====================================================
-  // DASHBOARD COUNTS
+  // CREATE COMPLETED STUDENTS
   // ====================================================
 
-  const joinedCount =
-    joinedStudents.length;
+  const completedStudents =
+    useMemo(() => {
 
-  const positiveCount =
-    enquiryCount(
-      "Positive"
-    );
+      const result =
+        new Map();
 
-  const pendingCount =
-    enquiryCount(
-      "Pending"
-    );
+      studentEntries.forEach(
+        student => {
 
-  const negativeCount =
-    enquiryCount(
-      "Negative"
-    );
-
-  // ====================================================
-  // JOINED STUDENTS BY CATEGORY
-  // ====================================================
-
-  const studentCategories =
-    uniqueCategories(
-      joinedStudents.map(
-        (student) =>
-          student.category
-      )
-    );
-
-  const allChartCategories =
-    uniqueCategories([
-      ...categories,
-      ...studentCategories,
-    ]);
-
-  const finalJoinedCounts =
-    allChartCategories
-      .map(
-        (category) => {
-
-          const categoryKey =
-            normalizeCategoryName(
-              category
+          const studentMobile =
+            normalizeMobile(
+              student.mobile
             );
 
-          const count =
-            joinedStudents.filter(
-              (student) =>
-                normalizeCategoryName(
-                  categoryOf(
-                    student.category
+          const matchedEnquiry =
+            completedEnquiries.find(
+              enquiry => {
+
+                const enquiryMobile =
+                  normalizeMobile(
+                    getMobile(enquiry)
+                  );
+
+                if (
+                  studentMobile &&
+                  enquiryMobile &&
+                  studentMobile ===
+                    enquiryMobile
+                ) {
+                  return true;
+                }
+
+                if (
+                  student.id &&
+                  enquiry.id &&
+                  String(
+                    student.id
+                  ) ===
+                    String(
+                      enquiry.id
+                    )
+                ) {
+                  return true;
+                }
+
+                const studentName =
+                  String(
+                    student.name || ""
                   )
-                ) ===
-                categoryKey
-            ).length;
+                    .trim()
+                    .toLowerCase();
 
-          return [
-            category,
-            count,
-          ];
+                const enquiryName =
+                  String(
+                    getName(enquiry) ||
+                      ""
+                  )
+                    .trim()
+                    .toLowerCase();
 
+                const studentCourse =
+                  String(
+                    student.course ||
+                      ""
+                  )
+                    .trim()
+                    .toLowerCase();
+
+                const enquiryCourse =
+                  String(
+                    getCourse(enquiry) ||
+                      ""
+                  )
+                    .trim()
+                    .toLowerCase();
+
+                return (
+                  studentName &&
+                  enquiryName &&
+                  studentName ===
+                    enquiryName &&
+                  (
+                    !studentCourse ||
+                    !enquiryCourse ||
+                    studentCourse ===
+                      enquiryCourse
+                  )
+                );
+              }
+            );
+
+          if (!matchedEnquiry) {
+            return;
+          }
+
+          const enquiryPaid =
+            getPaidFee(
+              matchedEnquiry
+            );
+
+          const enquiryPaymentDate =
+            getPaymentDate(
+              matchedEnquiry
+            );
+
+          const currentStudentPaidFee =
+            getPaidFee(
+              student
+            );
+
+          const currentStudentBalanceFee =
+            getBalanceFee(
+              student
+            );
+
+          const currentStudentTotalFee =
+            getTotalFee(
+              student,
+              currentStudentPaidFee,
+              currentStudentBalanceFee
+            );
+
+          const completedStudent = {
+
+            ...student,
+
+            status:
+              "Completed",
+
+            name:
+              student.name ||
+              getName(
+                matchedEnquiry
+              ),
+
+            mobile:
+              student.mobile ||
+              getMobile(
+                matchedEnquiry
+              ),
+
+            city:
+              student.city ||
+              matchedEnquiry.city ||
+              "",
+
+            category:
+              student.category ||
+              getCategory(
+                matchedEnquiry
+              ),
+
+            course:
+              student.course ||
+              getCourse(
+                matchedEnquiry
+              ),
+
+            paidFee:
+              currentStudentPaidFee,
+
+            balanceFee:
+              currentStudentBalanceFee,
+
+            totalFee:
+              currentStudentTotalFee >
+              0
+                ? currentStudentTotalFee
+                : getTotalFee(
+                    matchedEnquiry,
+                    enquiryPaid,
+                    0
+                  ),
+
+            joinDate:
+              student.joinDate ||
+              getJoinDate(
+                matchedEnquiry
+              ),
+
+            paymentDate:
+              student.paymentDate ||
+              enquiryPaymentDate,
+
+            dueDate:
+              student.dueDate ||
+              getDueDate(
+                matchedEnquiry
+              ),
+          };
+
+          const key =
+            normalizeMobile(
+              completedStudent.mobile
+            ) ||
+            completedStudent.id ||
+            `${completedStudent.name}-${completedStudent.course}`;
+
+          result.set(
+            String(key),
+            completedStudent
+          );
         }
-      )
-      .filter(
-        ([, count]) =>
-          count > 0
       );
 
-  const maxCount =
-    Math.max(
-      1,
-      ...finalJoinedCounts.map(
-        (item) => item[1]
-      )
-    );
+      // ==================================================
+      // COMPLETED ENQUIRY WITHOUT STUDENT RECORD
+      // ==================================================
 
-  // ====================================================
-  // OVERDUE FOLLOW UPS
-  // ====================================================
+      completedEnquiries.forEach(
+        enquiry => {
 
-  const today =
-    new Date();
+          const mobile =
+            normalizeMobile(
+              getMobile(enquiry)
+            );
 
-  const allOverdue =
-    currentRows.filter(
-      (row) => {
+          const name =
+            getName(enquiry);
 
-        const rowStatus =
-          statusOf(
-            row
-          ).toLowerCase();
+          const course =
+            getCourse(enquiry);
 
-        if (
-          [
-            "joined",
-            "negative",
-          ].includes(
-            rowStatus
-          )
-        ) {
-          return false;
-        }
+          const key =
+            mobile ||
+            enquiry.id ||
+            `${name}-${course}`;
 
-        if (
-          !row.next_followup_date
-        ) {
-          return false;
-        }
+          const existing =
+            result.get(
+              String(key)
+            );
 
-        const followupDate =
-          getDateValue(
-            row.next_followup_date
+          if (existing) {
+            return;
+          }
+
+          const paidFee =
+            getPaidFee(enquiry);
+
+          const balanceFee =
+            getBalanceFee(enquiry);
+
+          const totalFee =
+            getTotalFee(
+              enquiry,
+              paidFee,
+              balanceFee
+            );
+
+          result.set(
+            String(key),
+            {
+
+              ...enquiry,
+
+              id:
+                enquiry.id,
+
+              name,
+
+              mobile:
+                getMobile(enquiry),
+
+              city:
+                enquiry.city ||
+                "",
+
+              category:
+                getCategory(enquiry),
+
+              course,
+
+              paidFee,
+
+              balanceFee,
+
+              totalFee,
+
+              dueDate:
+                getDueDate(
+                  enquiry
+                ),
+
+              joinDate:
+                getJoinDate(
+                  enquiry
+                ),
+
+              paymentDate:
+                getPaymentDate(
+                  enquiry
+                ),
+
+              status:
+                "Completed",
+            }
           );
-
-        if (!followupDate) {
-          return false;
         }
+      );
 
-        return (
-          followupDate <
-          today
+      return Array.from(
+        result.values()
+      );
+
+    }, [
+      studentEntries,
+      completedEnquiries,
+    ]);
+
+  // ====================================================
+  // COUNTS
+  // ====================================================
+
+  const positiveCount =
+    enquiryCount("Positive");
+
+  const pendingCount =
+    enquiryCount("Pending");
+
+  const negativeCount =
+    enquiryCount("Negative");
+
+  const completedCount =
+    enquiryCount("Completed");
+
+  const totalEnquiries =
+    positiveCount +
+    pendingCount +
+    negativeCount +
+    completedCount;
+
+  // ====================================================
+  // OVERDUE FEES
+  // ====================================================
+
+  const allOverdueFees =
+    useMemo(() => {
+
+      const today =
+        new Date();
+
+      today.setHours(
+        0,
+        0,
+        0,
+        0
+      );
+
+      return studentEntries
+        .filter(
+          student => {
+
+            const dueDate =
+              getDateValue(
+                student.dueDate
+              );
+
+            const balanceFee =
+              getBalanceFee(
+                student
+              );
+
+            if (!dueDate) {
+              return false;
+            }
+
+            if (
+              balanceFee <= 0
+            ) {
+              return false;
+            }
+
+            return (
+              dueDate < today
+            );
+          }
+        )
+        .sort(
+          (a, b) => {
+
+            const dateA =
+              getDateValue(
+                a.dueDate
+              );
+
+            const dateB =
+              getDateValue(
+                b.dueDate
+              );
+
+            return (
+              dateA - dateB
+            );
+          }
         );
-      }
-    );
 
-  const overdue =
-    allOverdue.slice(
+    }, [
+      studentEntries,
+    ]);
+
+  const overdueFees =
+    allOverdueFees.slice(
       0,
       4
     );
 
   // ====================================================
-  // GET INCOME DATE
+  // GET STUDENT INCOME DATE
   // ====================================================
 
   const getStudentIncomeDate =
-    (student) => {
+    student => {
 
       return (
         student.paymentDate ||
         student.joinDate ||
         null
       );
-
     };
 
   // ====================================================
-  // INCOME BY RANGE
+  // LAST 15 DAYS STUDENTS
   // ====================================================
 
-  const incomeByRange =
-    (days) => {
-
-      return joinedStudents
-        .filter(
-          (student) =>
-            isWithinLastDays(
-              getStudentIncomeDate(
-                student
-              ),
-              days
-            )
-        )
-        .reduce(
-          (
-            sum,
+  const last15DaysStudents =
+    completedStudents.filter(
+      student =>
+        isWithinLastDays(
+          getStudentIncomeDate(
             student
-          ) =>
-            sum +
-            Number(
-              student.paidFee ||
-                0
-            ),
-          0
-        );
-
-    };
+          ),
+          15
+        )
+    );
 
   // ====================================================
-  // MONTHLY INCOME
+  // LAST 30 DAYS STUDENTS
   // ====================================================
 
-  const monthlyIncome =
-    joinedStudents
-      .filter(
-        (student) =>
-          isWithinLastDays(
+  const last30DaysStudents =
+    completedStudents.filter(
+      student =>
+        isWithinLastDays(
+          getStudentIncomeDate(
+            student
+          ),
+          30
+        )
+    );
+
+  // ====================================================
+  // CURRENT YEAR STUDENTS
+  // ====================================================
+
+  const yearlyStudents =
+    completedStudents.filter(
+      student => {
+
+        const dateValue =
+          getDateValue(
             getStudentIncomeDate(
               student
-            ),
-            30
-          )
-      )
-      .reduce(
-        (
-          sum,
-          student
-        ) =>
-          sum +
-          Number(
-            student.paidFee ||
-              0
-          ),
-        0
-      );
-
-  // ====================================================
-  // YEARLY INCOME
-  // ====================================================
-
-  const yearlyIncome =
-    joinedStudents
-      .filter(
-        (student) => {
-
-          const dateValue =
-            getDateValue(
-              getStudentIncomeDate(
-                student
-              )
-            );
-
-          if (!dateValue) {
-            return false;
-          }
-
-          return (
-            dateValue.getFullYear() ===
-            currentYear
+            )
           );
 
+        if (!dateValue) {
+          return false;
         }
-      )
-      .reduce(
-        (
-          sum,
-          student
-        ) =>
-          sum +
-          Number(
-            student.paidFee ||
-              0
-          ),
-        0
-      );
+
+        return (
+          dateValue.getFullYear() ===
+          currentYear
+        );
+      }
+    );
+
+  // ====================================================
+  // INCOME
+  // ====================================================
+
+  const last15DaysIncome =
+    last15DaysStudents.reduce(
+      (sum, student) =>
+        sum +
+        getNumberValue(
+          student.paidFee
+        ),
+      0
+    );
+
+  const last30DaysIncome =
+    last30DaysStudents.reduce(
+      (sum, student) =>
+        sum +
+        getNumberValue(
+          student.paidFee
+        ),
+      0
+    );
+
+  const yearlyIncome =
+    yearlyStudents.reduce(
+      (sum, student) =>
+        sum +
+        getNumberValue(
+          student.paidFee
+        ),
+      0
+    );
 
   // ====================================================
   // DOWNLOAD INCOME
@@ -874,6 +1490,8 @@ export default function Dashboard() {
       const header = [
         "Student Name",
         "Mobile",
+        "Category",
+        "Course",
         "Join Date",
         "Payment Date",
         "Paid Fee",
@@ -881,17 +1499,22 @@ export default function Dashboard() {
 
       const csv = [
         header.join(","),
+
         ...downloadRows.map(
-          (row) =>
+          row =>
             [
               row.name,
               row.mobile || "",
+              categoryOf(
+                row.category
+              ),
+              row.course || "",
               row.joinDate || "",
               row.paymentDate || "",
               row.paidFee || 0,
             ]
               .map(
-                (value) =>
+                value =>
                   `"${String(
                     value
                   ).replace(
@@ -948,69 +1571,13 @@ export default function Dashboard() {
     };
 
   // ====================================================
-  // LAST 15 DAYS STUDENTS
-  // ====================================================
-
-  const last15DaysStudents =
-    joinedStudents.filter(
-      (student) =>
-        isWithinLastDays(
-          getStudentIncomeDate(
-            student
-          ),
-          15
-        )
-    );
-
-  // ====================================================
-  // LAST 30 DAYS STUDENTS
-  // ====================================================
-
-  const last30DaysStudents =
-    joinedStudents.filter(
-      (student) =>
-        isWithinLastDays(
-          getStudentIncomeDate(
-            student
-          ),
-          30
-        )
-    );
-
-  // ====================================================
-  // CURRENT YEAR STUDENTS
-  // ====================================================
-
-  const yearlyStudents =
-    joinedStudents.filter(
-      (student) => {
-
-        const dateValue =
-          getDateValue(
-            getStudentIncomeDate(
-              student
-            )
-          );
-
-        if (!dateValue) {
-          return false;
-        }
-
-        return (
-          dateValue.getFullYear() ===
-          currentYear
-        );
-      }
-    );
-
-  // ====================================================
   // DOWNLOAD BUTTON
   // ====================================================
 
   const downloadButton =
     (
       label,
-      rows
+      downloadRows
     ) => (
 
       <button
@@ -1034,13 +1601,12 @@ export default function Dashboard() {
         onClick={() =>
           downloadIncome(
             label,
-            rows
+            downloadRows
           )
         }
       >
         ⭳
       </button>
-
     );
 
   // ====================================================
@@ -1048,19 +1614,21 @@ export default function Dashboard() {
   // ====================================================
 
   const incomeCards = [
+
     {
       icon: "⚡",
       color: "green",
 
+      label:
+        "Last 15 Days",
+
       value:
-        `₹${incomeByRange(
-          15
-        ).toLocaleString(
+        `₹${last15DaysIncome.toLocaleString(
           "en-IN"
         )}`,
 
       sub:
-        "Last 15 days",
+        "Total Paid Amount",
 
       action:
         downloadButton(
@@ -1073,17 +1641,20 @@ export default function Dashboard() {
       icon: "▣",
       color: "blue",
 
+      label:
+        "Last 30 Days",
+
       value:
-        `₹${monthlyIncome.toLocaleString(
+        `₹${last30DaysIncome.toLocaleString(
           "en-IN"
         )}`,
 
       sub:
-        "Last 30 days",
+        "Total Paid Amount",
 
       action:
         downloadButton(
-          "Monthly Income",
+          "30 Days Income",
           last30DaysStudents
         ),
     },
@@ -1092,20 +1663,24 @@ export default function Dashboard() {
       icon: "▥",
       color: "purple",
 
+      label:
+        `Year ${currentYear}`,
+
       value:
         `₹${yearlyIncome.toLocaleString(
           "en-IN"
         )}`,
 
       sub:
-        `Year ${currentYear}`,
+        "Total Paid Amount",
 
       action:
         downloadButton(
-          "Yearly Income",
+          `${currentYear} Income`,
           yearlyStudents
         ),
     },
+
   ];
 
   // ====================================================
@@ -1113,36 +1688,29 @@ export default function Dashboard() {
   // ====================================================
 
   const recentRow =
-    (row) => [
+    (
+      row,
+      index
+    ) => [
 
-      row.admin ||
-        "Admin",
+      index + 1,
 
-      row.candidate_name ||
-        row.name ||
-        "",
+      getName(row),
 
-      row.mobile ||
-        "",
+      getMobile(row),
 
-      row.city ||
-        "",
+      row.city || "",
 
-      typeof row.category ===
-      "object"
-        ? row.category?.name ||
-          ""
-        : row.category ||
-          "",
+      categoryOf(
+        getCategory(row)
+      ),
 
-      row.course ||
-        "",
+      getCourse(row),
 
       row.next_followup_date ||
         "",
 
       statusOf(row),
-
     ];
 
   // ====================================================
@@ -1154,56 +1722,68 @@ export default function Dashboard() {
     {
       icon: "▣",
       color: "blue",
+
       label:
         "Total Enquiries",
+
       value:
         totalEnquiries,
-      sub:
-        "Current Data",
     },
 
     {
       icon: "✓",
       color: "green",
+
       label:
         "Positive",
+
       value:
         positiveCount,
+
       sub: "",
     },
 
     {
       icon: "◷",
       color: "orange",
+
       label:
         "Pending",
+
       value:
         pendingCount,
+
       sub: "",
     },
 
     {
       icon: "↓",
       color: "red",
+
       label:
         "Negative",
+
       value:
         negativeCount,
+
       sub: "",
     },
 
     {
       icon: "♟",
       color: "purple",
+
       label:
-        "Joined",
+        "Completed",
+
       value:
-        joinedCount,
+        completedCount,
+
       sub: "",
     },
 
     ...incomeCards.map(
-      (item) => ({
+      item => ({
 
         icon:
           item.icon,
@@ -1225,6 +1805,7 @@ export default function Dashboard() {
 
       })
     ),
+
   ];
 
   // ====================================================
@@ -1233,23 +1814,6 @@ export default function Dashboard() {
 
   return (
     <>
-
-      {/* ==================================================
-          ACCOUNT ACTION
-      ================================================== */}
-
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "flex-end",
-          alignItems: "center",
-          marginBottom: "16px",
-        }}
-      >
-
-
-
-      </div>
 
       {/* ==================================================
           DASHBOARD STATS
@@ -1268,119 +1832,111 @@ export default function Dashboard() {
       <div className="dashboard-grid">
 
         {/* ==================================================
-            JOINED STUDENTS BY CATEGORY
+            OVERDUE FEES
         ================================================== */}
 
         <Panel
-          title="Joined Students by Category"
-          subtitle="Current data"
+          title="Overdue Fees"
+          subtitle={`${allOverdueFees.length} students have overdue fees`}
         >
 
-          <div className="chart-bars">
+          {overdueFees.length ? (
 
-            {finalJoinedCounts.map(
-              (item) => (
-
-                <div
-                  className="chart-row"
-                  key={
-                    item[0]
-                  }
-                >
-
-                  <label>
-                    {
-                      item[0]
-                    }
-                  </label>
-
-                  <div className="bar">
-
-                    <i
-                      style={{
-                        width:
-                          item[1] >
-                          0
-                            ? `${Math.max(
-                                8,
-                                (item[1] /
-                                  maxCount) *
-                                  100
-                              )}%`
-                            : "0%",
-                      }}
-                    />
-
-                  </div>
-
-                  <b>
-                    {
-                      item[1]
-                    }
-                  </b>
-
-                </div>
-
-              )
-            )}
-
-          </div>
-
-        </Panel>
-
-        {/* ==================================================
-            OVERDUE FOLLOW UPS
-        ================================================== */}
-
-        <Panel
-          title="Overdue Follow-ups"
-          subtitle={`${allOverdue.length} follow-ups overdue`}
-        >
-
-          {overdue.length ? (
-
-            overdue.map(
+            overdueFees.map(
               (
-                row,
+                student,
                 index
               ) => (
 
                 <div
                   className="follow-item"
-                  key={`${keyOf(
-                    row
-                  )}-${index}`}
+                  key={
+                    `${student.id || normalizeMobile(
+                      student.mobile
+                    )}-${index}`
+                  }
                 >
 
                   <div>
 
                     <strong>
                       {
-                        row.candidate_name ||
-                        row.name
+                        student.name ||
+                        "Unknown Student"
                       }
                     </strong>
 
                     <small>
                       {
-                        row.course
+                        student.course ||
+                        "Course not available"
                       }
                     </small>
 
                     <small>
-                      Due{" "}
+                      Mobile:{" "}
                       {
-                        row.next_followup_date
+                        student.mobile ||
+                        "-"
+                      }
+                    </small>
+
+                    <small>
+                      Due Date:{" "}
+                      {
+                        formatDate(
+                          student.dueDate
+                        )
                       }
                     </small>
 
                   </div>
 
-                  <Badge
-                    status={statusOf(
-                      row
-                    )}
-                  />
+                  <div
+                    style={{
+                      display:
+                        "flex",
+                      flexDirection:
+                        "column",
+                      alignItems:
+                        "flex-end",
+                      gap: "4px",
+                    }}
+                  >
+
+                    {/* ==================================================
+                        BALANCE DUE AMOUNT - RED
+                    ================================================== */}
+
+                    <strong
+                      style={{
+                        fontSize:
+                          "15px",
+
+                        color:
+                          "#dc2626",
+
+                        fontWeight:
+                          "700",
+                      }}
+                    >
+                      ₹
+                      {getNumberValue(
+                        student.balanceFee
+                      ).toLocaleString(
+                        "en-IN"
+                      )}
+                    </strong>
+
+                    <small>
+                      Balance Due
+                    </small>
+
+                    <Badge
+                      status="Due"
+                    />
+
+                  </div>
 
                 </div>
 
@@ -1390,24 +1946,191 @@ export default function Dashboard() {
           ) : (
 
             <div className="empty">
-              No overdue
-              follow-ups.
+              No overdue fees.
             </div>
 
           )}
 
-          {allOverdue.length >
+          {allOverdueFees.length >
             4 && (
 
             <Link
               className="link-btn"
-              to="/follow-ups"
+              to="/students"
             >
-              View all
-              follow-ups
+              View all students
             </Link>
 
           )}
+
+        </Panel>
+
+        {/* ==================================================
+            OVERDUE FOLLOW UPS
+        ================================================== */}
+
+        <Panel
+          title="Overdue Follow-ups"
+          subtitle={`${currentRows.filter(
+            row => {
+
+              const rowStatus =
+                normalizedStatus(
+                  row
+                );
+
+              if (
+                [
+                  "completed",
+                  "negative",
+                ].includes(
+                  rowStatus
+                )
+              ) {
+                return false;
+              }
+
+              if (
+                !row.next_followup_date
+              ) {
+                return false;
+              }
+
+              const followupDate =
+                getDateValue(
+                  row.next_followup_date
+                );
+
+              if (!followupDate) {
+                return false;
+              }
+
+              return (
+                followupDate <
+                new Date()
+              );
+
+            }
+          ).length} follow-ups overdue`}
+        >
+
+          {(() => {
+
+            const today =
+              new Date();
+
+            const allOverdue =
+              currentRows.filter(
+                row => {
+
+                  const rowStatus =
+                    normalizedStatus(
+                      row
+                    );
+
+                  if (
+                    [
+                      "completed",
+                      "negative",
+                    ].includes(
+                      rowStatus
+                    )
+                  ) {
+                    return false;
+                  }
+
+                  if (
+                    !row.next_followup_date
+                  ) {
+                    return false;
+                  }
+
+                  const followupDate =
+                    getDateValue(
+                      row.next_followup_date
+                    );
+
+                  if (!followupDate) {
+                    return false;
+                  }
+
+                  return (
+                    followupDate <
+                    today
+                  );
+
+                }
+              );
+
+            const overdue =
+              allOverdue.slice(
+                0,
+                4
+              );
+
+            return overdue.length ? (
+
+              overdue.map(
+                (
+                  row,
+                  index
+                ) => (
+
+                  <div
+                    className="follow-item"
+                    key={`${keyOf(
+                      row
+                    )}-${index}`}
+                  >
+
+                    <div>
+
+                      <strong>
+                        {
+                          getName(
+                            row
+                          )
+                        }
+                      </strong>
+
+                      <small>
+                        {
+                          getCourse(
+                            row
+                          )
+                        }
+                      </small>
+
+                      <small>
+                        Due{" "}
+                        {
+                          row.next_followup_date
+                        }
+                      </small>
+
+                    </div>
+
+                    <Badge
+                      status={statusOf(
+                        row
+                      )}
+                    />
+
+                  </div>
+
+                )
+              )
+
+            ) : (
+
+              <div className="empty">
+                No overdue
+                follow-ups.
+              </div>
+
+            );
+
+          })()}
 
         </Panel>
 
@@ -1440,34 +2163,32 @@ export default function Dashboard() {
             type="text"
             placeholder="Search candidate, mobile or city..."
             value={query}
-            onChange={(
-              event
-            ) => {
+            onChange={
+              event => {
 
-              setQuery(
-                event.target
-                  .value
-              );
+                setQuery(
+                  event.target.value
+                );
 
-              setPage(1);
+                setPage(1);
 
-            }}
+              }
+            }
           />
 
           <select
             value={status}
-            onChange={(
-              event
-            ) => {
+            onChange={
+              event => {
 
-              setStatus(
-                event.target
-                  .value
-              );
+                setStatus(
+                  event.target.value
+                );
 
-              setPage(1);
+                setPage(1);
 
-            }}
+              }
+            }
           >
 
             <option value="">
@@ -1480,9 +2201,9 @@ export default function Dashboard() {
               "Low",
               "Hold",
               "Negative",
-              "Joined",
+              "Completed",
             ].map(
-              (item) => (
+              item => (
 
                 <option
                   key={item}
@@ -1511,7 +2232,7 @@ export default function Dashboard() {
               <tr>
 
                 {[
-                  "Admin",
+                  "ID",
                   "Candidate",
                   "Mobile",
                   "City",
@@ -1520,7 +2241,7 @@ export default function Dashboard() {
                   "Follow-up",
                   "Status",
                 ].map(
-                  (header) => (
+                  header => (
 
                     <th
                       key={
@@ -1549,7 +2270,10 @@ export default function Dashboard() {
 
                   const values =
                     recentRow(
-                      row
+                      row,
+                      (page - 1) *
+                        5 +
+                        index
                     );
 
                   return (
@@ -1615,13 +2339,13 @@ export default function Dashboard() {
           filtered.length ===
             0 && (
 
-            <div className="empty">
-              No enquiries
-              match these
-              filters.
-            </div>
+          <div className="empty">
+            No enquiries
+            match these
+            filters.
+          </div>
 
-          )}
+        )}
 
         {/* ==================================================
             LOADING
@@ -1652,4 +2376,4 @@ export default function Dashboard() {
 
     </>
   );
-}
+} 

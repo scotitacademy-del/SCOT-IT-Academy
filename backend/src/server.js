@@ -427,7 +427,49 @@ app.delete("/api/enquiries/:id", auth, (req, res) => {
 });
 
 app.get("/api/students", auth, async (req, res) => {
+  const { month, year } = req.query;
+  if (month && year) {
+    const m = parseInt(month, 10);
+    const y = parseInt(year, 10);
+    if (!m || !y || m < 1 || m > 12) {
+      return res.status(400).json({ message: "Valid month (1-12) and year are required." });
+    }
+    const [rows] = await mysqlPool.query(
+      "SELECT * FROM students WHERE MONTH(join_date) = ? AND YEAR(join_date) = ? ORDER BY id DESC",
+      [m, y]
+    );
+    return res.json(rows.map(mapMysqlStudent));
+  }
   const [rows] = await mysqlPool.query("SELECT * FROM students ORDER BY id DESC");
+  return res.json(rows.map(mapMysqlStudent));
+});
+
+app.get("/api/students/next-id", auth, async (req, res) => {
+  const [rows] = await mysqlPool.query(
+    "SELECT student_id FROM students WHERE student_id REGEXP '^SCT[0-9]+$' ORDER BY id DESC LIMIT 1"
+  );
+  let nextNum = 1;
+  if (rows.length > 0) {
+    const match = String(rows[0].student_id).match(/^SCT(\d+)$/i);
+    if (match) {
+      nextNum = parseInt(match[1], 10) + 1;
+    }
+  }
+  const nextId = `SCT${String(nextNum).padStart(3, "0")}`;
+  return res.json({ nextId });
+});
+
+app.get("/api/students/session", auth, async (req, res) => {
+  const { month, year } = req.query;
+  const m = parseInt(month, 10);
+  const y = parseInt(year, 10);
+  if (!m || !y || m < 1 || m > 12) {
+    return res.status(400).json({ message: "Valid month (1-12) and year are required." });
+  }
+  const [rows] = await mysqlPool.query(
+    "SELECT * FROM students WHERE MONTH(join_date) = ? AND YEAR(join_date) = ? ORDER BY id DESC",
+    [m, y]
+  );
   return res.json(rows.map(mapMysqlStudent));
 });
 
@@ -436,12 +478,37 @@ app.post("/api/students", auth, async (req, res) => {
   const paidFee = toNumber(payload.paidFee ?? payload.paid_fee, 0);
   const balanceFee = toNumber(payload.balanceFee ?? payload.balance_fee, 0);
   const totalFee = toNumber(payload.totalFee ?? payload.total_fee, paidFee + balanceFee);
-  const studentId = payload.studentId || `ST-${Date.now()}`;
+
+  // Auto-generate sequential Student ID (SCT001, SCT002, ...)
+  let studentId = String(payload.studentId || payload.student_id || "").trim();
+  if (!studentId) {
+    const [idRows] = await mysqlPool.query(
+      "SELECT student_id FROM students WHERE student_id REGEXP '^SCT[0-9]+$' ORDER BY id DESC LIMIT 1"
+    );
+    let nextNum = 1;
+    if (idRows.length > 0) {
+      const match = String(idRows[0].student_id).match(/^SCT(\d+)$/i);
+      if (match) nextNum = parseInt(match[1], 10) + 1;
+    }
+    studentId = `SCT${String(nextNum).padStart(3, "0")}`;
+  }
+
+  // Check uniqueness
+  const [existCheck] = await mysqlPool.execute(
+    "SELECT id FROM students WHERE student_id = ?", [studentId]
+  );
+  if (existCheck.length > 0) {
+    return res.status(409).json({ message: "Student ID already exists." });
+  }
+
+  const joinDate = payload.joinDate || payload.join_date || new Date().toISOString().slice(0, 10);
+  const status = payload.status || "Active";
+
   const [result] = await mysqlPool.execute(
     `INSERT INTO students
       (student_id, name, course, mobile, email, city, category, paid_fee, balance_fee, total_fee, due_date, join_date, status)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), ?)`,
-    [studentId, payload.name || payload.candidate_name || "", payload.course || "", payload.mobile || "", payload.email || "", payload.city || "", payload.category || "", paidFee, balanceFee, totalFee, payload.dueDate || payload.due_date || "", payload.joinDate || payload.join_date || new Date().toISOString().slice(0, 10), payload.status || "Joined"]
+    [studentId, payload.name || payload.candidate_name || "", payload.course || "", payload.mobile || "", payload.email || "", payload.city || "", payload.category || "", paidFee, balanceFee, totalFee, payload.dueDate || payload.due_date || "", joinDate, status]
   );
   const [rows] = await mysqlPool.execute("SELECT * FROM students WHERE id = ?", [result.insertId]);
   return res.status(201).json(mapMysqlStudent(rows[0]));

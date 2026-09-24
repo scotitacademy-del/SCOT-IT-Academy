@@ -1,6 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { enquiryApi } from "../services/api";
-import { Panel, Stats, Badge, Pagination } from "../components/Ui";
+import {
+  Panel,
+  Stats,
+  Badge,
+  Pagination,
+} from "../components/Ui";
 
 // ======================================================
 // DATE HELPER
@@ -12,13 +17,16 @@ import { Panel, Stats, Badge, Pagination } from "../components/Ui";
 // 2026-09-04 18:30:00
 // into:
 // 2026-09-04
+
 function formatDateForInput(value) {
   if (!value) return "";
 
   const stringValue = String(value).trim();
 
   // Already YYYY-MM-DD
-  const match = stringValue.match(/^(\d{4}-\d{2}-\d{2})/);
+  const match = stringValue.match(
+    /^(\d{4}-\d{2}-\d{2})/
+  );
 
   if (match) {
     return match[1];
@@ -32,13 +40,57 @@ function formatDateForInput(value) {
 // ======================================================
 
 function formatDateForDisplay(value) {
-  const dateValue = formatDateForInput(value);
+  const dateValue =
+    formatDateForInput(value);
 
   if (!dateValue) return "-";
 
-  const [year, month, day] = dateValue.split("-");
+  const [
+    year,
+    month,
+    day,
+  ] = dateValue.split("-");
 
   return `${day}-${month}-${year}`;
+}
+
+// ======================================================
+// CHECK COMPLETED STATUS
+// ======================================================
+
+function isCompletedStatus(status) {
+  const normalizedStatus = String(
+    status || ""
+  )
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
+
+  return [
+    "completed",
+    "complete",
+    "complate",
+    "complated",
+  ].includes(normalizedStatus);
+}
+
+// ======================================================
+// CHECK EXCLUDED STATUS
+// ======================================================
+
+function isExcludedStatus(status) {
+  const normalizedStatus = String(
+    status || ""
+  )
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
+
+  return (
+    normalizedStatus === "joined" ||
+    normalizedStatus === "negative" ||
+    isCompletedStatus(status)
+  );
 }
 
 // ======================================================
@@ -83,7 +135,9 @@ function normalize(item) {
 
     // IMPORTANT:
     // Always convert API date into YYYY-MM-DD
-    date: formatDateForInput(followUpDate),
+    date: formatDateForInput(
+      followUpDate
+    ),
 
     status: String(
       item.status ||
@@ -91,7 +145,7 @@ function normalize(item) {
       item.finalStatus ||
       item.student_status ||
       "Pending"
-    ).trim()
+    ).trim(),
   };
 }
 
@@ -101,32 +155,43 @@ function normalize(item) {
 
 export default function FollowUps() {
   const [rows, setRows] = useState([]);
-  const [page, setPage] = useState(1);
 
-  const [selected, setSelected] = useState(null);
+  const [page, setPage] =
+    useState(1);
 
-  const [editForm, setEditForm] = useState({
-    date: "",
-    discussion: ""
-  });
+  const [selected, setSelected] =
+    useState(null);
 
-  // ======================================================
+  const [editForm, setEditForm] =
+    useState({
+      date: "",
+      discussion: "",
+    });
+
+  // ====================================================
   // TODAY
-  // ======================================================
+  // ====================================================
 
   const today = (() => {
     const date = new Date();
 
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
+    const year =
+      date.getFullYear();
+
+    const month = String(
+      date.getMonth() + 1
+    ).padStart(2, "0");
+
+    const day = String(
+      date.getDate()
+    ).padStart(2, "0");
 
     return `${year}-${month}-${day}`;
   })();
 
-  // ======================================================
+  // ====================================================
   // LOAD ENQUIRIES
-  // ======================================================
+  // ====================================================
 
   useEffect(() => {
     loadFollowUps();
@@ -134,73 +199,86 @@ export default function FollowUps() {
 
   async function loadFollowUps() {
     try {
-      const response = await enquiryApi.list();
+      const response =
+        await enquiryApi.list();
 
       const data =
         response?.data?.results ||
         response?.data ||
         [];
 
-      const normalizedData = Array.isArray(data)
-        ? data.map(normalize)
-        : [];
+      const normalizedData =
+        Array.isArray(data)
+          ? data.map(normalize)
+          : [];
 
       setRows(normalizedData);
     } catch (error) {
-      console.error("Failed to load follow-ups:", error);
+      console.error(
+        "Failed to load follow-ups:",
+        error
+      );
+
       setRows([]);
     }
   }
 
-  // ======================================================
+  // ====================================================
   // OPEN FOLLOW-UP MODAL
-  // ======================================================
+  // ====================================================
 
   function openFollowUp(row) {
-    const normalizedRow = normalize(row);
+    const normalizedRow =
+      normalize(row);
 
-    setSelected(normalizedRow);
+    setSelected(
+      normalizedRow
+    );
 
     setEditForm({
-      // IMPORTANT:
       // Date input receives ONLY YYYY-MM-DD
-      date: formatDateForInput(normalizedRow.date),
+      date: formatDateForInput(
+        normalizedRow.date
+      ),
 
       discussion:
         normalizedRow.discussion ||
-        "No discussion recorded"
+        "No discussion recorded",
     });
   }
 
-  // ======================================================
+  // ====================================================
   // CLOSE MODAL
-  // ======================================================
+  // ====================================================
 
   function closeModal() {
     setSelected(null);
 
     setEditForm({
       date: "",
-      discussion: ""
+      discussion: "",
     });
   }
 
-  // ======================================================
+  // ====================================================
   // HANDLE FORM CHANGE
-  // ======================================================
+  // ====================================================
 
   function handleChange(event) {
-    const { name, value } = event.target;
+    const {
+      name,
+      value,
+    } = event.target;
 
-    setEditForm(prev => ({
+    setEditForm((prev) => ({
       ...prev,
-      [name]: value
+      [name]: value,
     }));
   }
 
-  // ======================================================
+  // ====================================================
   // SAVE FOLLOW-UP
-  // ======================================================
+  // ====================================================
 
   async function updateFollowUp(event) {
     event.preventDefault();
@@ -208,34 +286,40 @@ export default function FollowUps() {
     if (!selected) return;
 
     const followUpDate =
-      formatDateForInput(editForm.date);
+      formatDateForInput(
+        editForm.date
+      );
 
     const discussion =
       editForm.discussion.trim() ||
       "No discussion recorded";
 
-    // ====================================================
+    // ==================================================
     // UPDATE LOCAL ROW
-    // ====================================================
+    // ==================================================
 
-    const updatedRow = normalize({
-      ...selected,
+    const updatedRow =
+      normalize({
+        ...selected,
 
-      date: followUpDate,
+        date: followUpDate,
 
-      next_followup_date: followUpDate,
+        next_followup_date:
+          followUpDate,
 
-      followup_date: followUpDate,
+        followup_date:
+          followUpDate,
 
-      comments: discussion,
+        comments: discussion,
 
-      last_discussion: discussion,
+        last_discussion:
+          discussion,
 
-      discussion: discussion
-    });
+        discussion: discussion,
+      });
 
-    setRows(prevRows =>
-      prevRows.map(row => {
+    setRows((prevRows) =>
+      prevRows.map((row) => {
         if (
           selected.id &&
           row.id === selected.id
@@ -247,37 +331,46 @@ export default function FollowUps() {
       })
     );
 
-    // ====================================================
+    // ==================================================
     // UPDATE BACKEND
-    // ====================================================
+    // ==================================================
 
     if (selected.id) {
       try {
-        await enquiryApi.update(selected.id, {
-          ...selected,
+        await enquiryApi.update(
+          selected.id,
+          {
+            ...selected,
 
-          candidate_name:
-            selected.candidate ||
-            selected.name ||
-            selected.candidate_name ||
-            "",
+            candidate_name:
+              selected.candidate ||
+              selected.name ||
+              selected.candidate_name ||
+              "",
 
-          name:
-            selected.candidate ||
-            selected.name ||
-            selected.candidate_name ||
-            "",
+            name:
+              selected.candidate ||
+              selected.name ||
+              selected.candidate_name ||
+              "",
 
-          next_followup_date: followUpDate,
+            next_followup_date:
+              followUpDate,
 
-          followup_date: followUpDate,
+            followup_date:
+              followUpDate,
 
-          comments: discussion,
+            comments:
+              discussion,
 
-          last_discussion: discussion
-        });
+            last_discussion:
+              discussion,
+          }
+        );
 
-        console.log("Follow-up updated successfully");
+        console.log(
+          "Follow-up updated successfully"
+        );
       } catch (error) {
         console.error(
           "Failed to update follow-up:",
@@ -286,71 +379,141 @@ export default function FollowUps() {
       }
     }
 
-    // ====================================================
+    // ==================================================
     // UPDATE SELECTED DATA
-    // ====================================================
+    // ==================================================
 
-    setSelected(updatedRow);
+    setSelected(
+      updatedRow
+    );
 
     setEditForm({
       date: followUpDate,
-      discussion
+      discussion,
     });
   }
 
   // ======================================================
   // FILTER ACTIVE FOLLOW-UPS
   // ======================================================
+  //
+  // IMPORTANT:
+  // Completed, Complete, Complate and Complated
+  // are removed from follow-up cards and table.
+  //
+  // Joined and Negative are also excluded.
+  // ======================================================
 
-  const activeRows = rows.filter(row => {
-    const status = String(
-      row.status || ""
-    )
-      .trim()
-      .toLowerCase();
+  const activeRows =
+    rows.filter((row) => {
+      const status =
+        String(
+          row.status || ""
+        ).trim();
 
-    return (
-      !["joined", "negative"].includes(status) &&
-      Boolean(formatDateForInput(row.date))
-    );
-  });
+      // Do not show completed rows
+      if (
+        isCompletedStatus(status)
+      ) {
+        return false;
+      }
+
+      // Do not show Joined / Negative
+      if (
+        isExcludedStatus(status)
+      ) {
+        return false;
+      }
+
+      // Follow-up date must exist
+      if (
+        !formatDateForInput(
+          row.date
+        )
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+
+  // ======================================================
+  // RESET PAGE WHEN FILTERED DATA CHANGES
+  // ======================================================
+
+  useEffect(() => {
+    const totalPages =
+      Math.max(
+        1,
+        Math.ceil(
+          activeRows.length / 10
+        )
+      );
+
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [
+    activeRows.length,
+    page,
+  ]);
 
   // ======================================================
   // TODAY
   // ======================================================
 
-  const todayRows = activeRows.filter(row => {
-    return formatDateForInput(row.date) === today;
-  });
+  const todayRows =
+    activeRows.filter((row) => {
+      return (
+        formatDateForInput(
+          row.date
+        ) === today
+      );
+    });
 
   // ======================================================
   // OVERDUE
   // ======================================================
 
-  const overdueRows = activeRows.filter(row => {
-    const date = formatDateForInput(row.date);
+  const overdueRows =
+    activeRows.filter((row) => {
+      const date =
+        formatDateForInput(
+          row.date
+        );
 
-    return date && date < today;
-  });
+      return (
+        date &&
+        date < today
+      );
+    });
 
   // ======================================================
   // UPCOMING
   // ======================================================
 
-  const upcomingRows = activeRows.filter(row => {
-    const date = formatDateForInput(row.date);
+  const upcomingRows =
+    activeRows.filter((row) => {
+      const date =
+        formatDateForInput(
+          row.date
+        );
 
-    return date && date > today;
-  });
+      return (
+        date &&
+        date > today
+      );
+    });
 
   // ======================================================
   // PAGINATION
   // ======================================================
 
-  const visibleRows = activeRows.slice(
-    (page - 1) * 10,
-    page * 10
-  );
+  const visibleRows =
+    activeRows.slice(
+      (page - 1) * 10,
+      page * 10
+    );
 
   // ======================================================
   // UI
@@ -367,23 +530,27 @@ export default function FollowUps() {
           {
             icon: "◷",
             color: "orange",
-            label: "Today's Follow-ups",
-            value: todayRows.length
+            label:
+              "Today's Follow-ups",
+            value:
+              todayRows.length,
           },
 
           {
             icon: "!",
             color: "red",
             label: "Overdue",
-            value: overdueRows.length
+            value:
+              overdueRows.length,
           },
 
           {
             icon: "→",
             color: "blue",
             label: "Upcoming",
-            value: upcomingRows.length
-          }
+            value:
+              upcomingRows.length,
+          },
         ]}
       />
 
@@ -405,8 +572,8 @@ export default function FollowUps() {
                   "Last Discussion",
                   "Date",
                   "Status",
-                  "Action"
-                ].map(header => (
+                  "Action",
+                ].map((header) => (
                   <th key={header}>
                     {header}
                   </th>
@@ -415,58 +582,77 @@ export default function FollowUps() {
             </thead>
 
             <tbody>
-              {visibleRows.map((row, index) => (
-                <tr
-                  key={
-                    row.id ||
-                    `${row.candidate}-${row.date}-${index}`
-                  }
-                >
-                  {/* Candidate */}
-                  <td>
-                    {row.candidate || "-"}
-                  </td>
+              {visibleRows.map(
+                (row, index) => (
+                  <tr
+                    key={
+                      row.id ||
+                      `${row.candidate}-${row.date}-${index}`
+                    }
+                  >
+                    {/* Candidate */}
 
-                  {/* Course */}
-                  <td>
-                    {row.course || "-"}
-                  </td>
+                    <td>
+                      {row.candidate ||
+                        "-"}
+                    </td>
 
-                  {/* Discussion */}
-                  <td>
-                    {row.discussion ||
-                      "No discussion recorded"}
-                  </td>
+                    {/* Course */}
 
-                  {/* Date */}
-                  <td>
-                    {formatDateForDisplay(row.date)}
-                  </td>
+                    <td>
+                      {row.course ||
+                        "-"}
+                    </td>
 
-                  {/* Status */}
-                  <td>
-                    <Badge status={row.status} />
-                  </td>
+                    {/* Discussion */}
 
-                  {/* Action */}
-                  <td>
-                    <button
-                      type="button"
-                      className="primary small"
-                      onClick={() =>
-                        openFollowUp(row)
-                      }
-                    >
-                      Follow-up
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    <td>
+                      {row.discussion ||
+                        "No discussion recorded"}
+                    </td>
+
+                    {/* Date */}
+
+                    <td>
+                      {formatDateForDisplay(
+                        row.date
+                      )}
+                    </td>
+
+                    {/* Status */}
+
+                    <td>
+                      <Badge
+                        status={
+                          row.status
+                        }
+                      />
+                    </td>
+
+                    {/* Action */}
+
+                    <td>
+                      <button
+                        type="button"
+                        className="primary small"
+                        onClick={() =>
+                          openFollowUp(
+                            row
+                          )
+                        }
+                      >
+                        Follow-up
+                      </button>
+                    </td>
+                  </tr>
+                )
+              )}
             </tbody>
           </table>
         </div>
 
-        {activeRows.length === 0 && (
+        {activeRows.length ===
+          0 && (
           <div className="empty">
             No current follow-ups.
           </div>
@@ -475,7 +661,9 @@ export default function FollowUps() {
         <Pagination
           page={page}
           setPage={setPage}
-          total={activeRows.length}
+          total={
+            activeRows.length
+          }
         />
       </Panel>
 
@@ -490,8 +678,10 @@ export default function FollowUps() {
         >
           <form
             className="modal edit-modal"
-            onSubmit={updateFollowUp}
-            onClick={event =>
+            onSubmit={
+              updateFollowUp
+            }
+            onClick={(event) =>
               event.stopPropagation()
             }
           >
@@ -507,14 +697,17 @@ export default function FollowUps() {
                 </h3>
 
                 <p>
-                  Previous follow-up details
+                  Previous follow-up
+                  details
                 </p>
               </div>
 
               <button
                 type="button"
                 className="modal-close"
-                onClick={closeModal}
+                onClick={
+                  closeModal
+                }
               >
                 ×
               </button>
@@ -527,7 +720,7 @@ export default function FollowUps() {
             <div
               className="form-grid"
               style={{
-                marginTop: "16px"
+                marginTop: "16px",
               }}
             >
               {/* Student Name */}
@@ -540,7 +733,8 @@ export default function FollowUps() {
                 <input
                   type="text"
                   value={
-                    selected.candidate || ""
+                    selected.candidate ||
+                    ""
                   }
                   readOnly
                 />
@@ -568,18 +762,19 @@ export default function FollowUps() {
 
               <div className="form-group">
                 <label>
-                  Previous Follow-up Date
+                  Previous Follow-up
+                  Date
                 </label>
 
                 <input
                   type="date"
                   name="date"
-                  value={
-                    formatDateForInput(
-                      editForm.date
-                    )
+                  value={formatDateForInput(
+                    editForm.date
+                  )}
+                  onChange={
+                    handleChange
                   }
-                  onChange={handleChange}
                 />
               </div>
 
@@ -593,7 +788,8 @@ export default function FollowUps() {
                 <input
                   type="text"
                   value={
-                    selected.status || "Pending"
+                    selected.status ||
+                    "Pending"
                   }
                   readOnly
                 />
@@ -603,15 +799,19 @@ export default function FollowUps() {
 
               <div className="form-group full">
                 <label>
-                  Comments / Last Discussion
+                  Comments / Last
+                  Discussion
                 </label>
 
                 <textarea
                   name="discussion"
                   value={
-                    editForm.discussion || ""
+                    editForm.discussion ||
+                    ""
                   }
-                  onChange={handleChange}
+                  onChange={
+                    handleChange
+                  }
                   rows={5}
                   placeholder="Enter follow-up discussion..."
                 />
@@ -629,13 +829,15 @@ export default function FollowUps() {
                 display: "flex",
                 justifyContent:
                   "flex-end",
-                gap: "10px"
+                gap: "10px",
               }}
             >
               <button
                 type="button"
                 className="secondary"
-                onClick={closeModal}
+                onClick={
+                  closeModal
+                }
               >
                 Close
               </button>
