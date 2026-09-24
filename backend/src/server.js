@@ -1,5 +1,4 @@
-require("./server-mysql");
-/*
+const express = require("express");
 const cors = require("cors");
 const fs = require("fs");
 const path = require("path");
@@ -718,4 +717,3 @@ ensureMysqlSchema()
     console.error(`Unable to connect to MySQL database '${DB_NAME}':`, error.message);
     process.exitCode = 1;
   });
-*/
