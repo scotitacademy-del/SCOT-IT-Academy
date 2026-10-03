@@ -2,7 +2,7 @@
 export const REFERRED_BY_OPTIONS = Object.freeze([
   "Staff Referral",
   "Dhana Ref",
-  "Website Cal",
+  "Website Call",
   "Direct Visit",
   "OT Old Students",
   "SCOT Students",
