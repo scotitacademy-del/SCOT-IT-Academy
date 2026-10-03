@@ -1915,6 +1915,21 @@ export default function Students() {
                 />
               </div>
 
+              {/* MOBILE */}
+              <div className="form-group">
+                <label htmlFor="student-mobile">
+                  Mobile Number
+                </label>
+
+                <input
+                  name="mobile" id="student-mobile"
+                  value={form.mobile ?? ""}
+                  onChange={change}
+                  type="tel"
+                  placeholder="10-digit mobile"
+                />
+              </div>
+
 
               {/* CITY */}
               <div className="form-group">
