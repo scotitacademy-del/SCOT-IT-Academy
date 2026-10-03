@@ -1,3 +1,5 @@
+import { REFERRED_BY_OPTIONS } from "../data/referralOptions";
+import { ResponsiveTable } from "../components/Ui";
 import React, {
   useEffect,
   useMemo,
@@ -6,7 +8,6 @@ import React, {
 
 import {
   enquiryApi,
-  referralApi,
 } from "../services/api";
 
 import {
@@ -474,14 +475,6 @@ export default function EnquiryList() {
   const [error, setError] =
     useState("");
 
-  const [referrals, setReferrals] =
-    useState([]);
-
-  const [
-    referralsLoading,
-    setReferralsLoading,
-  ] = useState(false);
-
   const ITEMS_PER_PAGE = 10;
 
   /* =========================================================
@@ -531,74 +524,11 @@ export default function EnquiryList() {
   }
 
   /* =========================================================
-     LOAD REFERRED BY
-  ========================================================= */
-
-  async function loadReferrals() {
-    setReferralsLoading(true);
-
-    try {
-      const response =
-        await referralApi.list();
-
-      const responseData =
-        response?.data;
-
-      const data =
-        responseData?.results ||
-        responseData ||
-        [];
-
-      const cleanData =
-        Array.isArray(data)
-          ? data
-              .map((item) => ({
-                id: item.id,
-
-                name: String(
-                  item.name ||
-                    item.referral_name ||
-                    item.title ||
-                    ""
-                ).trim(),
-              }))
-              .filter(
-                (item) =>
-                  item.name
-              )
-          : [];
-
-      cleanData.sort(
-        (a, b) =>
-          a.name.localeCompare(
-            b.name
-          )
-      );
-
-      setReferrals(
-        cleanData
-      );
-    } catch (err) {
-      console.error(
-        "Failed to load Referred By data:",
-        err
-      );
-
-      setReferrals([]);
-    } finally {
-      setReferralsLoading(
-        false
-      );
-    }
-  }
-
-  /* =========================================================
      INITIAL LOAD
   ========================================================= */
 
   useEffect(() => {
     loadEnquiries();
-    loadReferrals();
   }, []);
 
   /* =========================================================
@@ -1025,7 +955,6 @@ export default function EnquiryList() {
     setMessage("");
     setError("");
 
-    await loadReferrals();
 
     let editData =
       normalize(row);
@@ -1934,7 +1863,7 @@ export default function EnquiryList() {
         ================================================= */}
 
         <div className="table-scroll">
-          <table>
+          <ResponsiveTable>
             <thead>
               <tr>
                 {[
@@ -2119,7 +2048,7 @@ export default function EnquiryList() {
                 )
               )}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
 
         {/* =================================================
@@ -2448,39 +2377,17 @@ export default function EnquiryList() {
                     onChange={
                       change
                     }
-                    disabled={
-                      referralsLoading
-                    }
                   >
                     <option value="">
-                      {referralsLoading
-                        ? "Loading Referred By..."
-                        : "Select Referred By"}
+                      Select Referred By
                     </option>
 
-                    {referrals.map(
-                      (item) => (
-                        <option
-                          key={
-                            item.id
-                          }
-                          value={
-                            item.name
-                          }
-                        >
-                          {
-                            item.name
-                          }
-                        </option>
-                      )
-                    )}
+                    {REFERRED_BY_OPTIONS.map(name => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
 
                     {form.referred_by &&
-                      !referrals.some(
-                        (item) =>
-                          item.name ===
-                          form.referred_by
-                      ) && (
+                      !REFERRED_BY_OPTIONS.includes(form.referred_by) && (
                         <option
                           value={
                             form.referred_by

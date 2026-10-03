@@ -710,7 +710,7 @@ body {
 .table-panel {
   overflow:hidden
 }
-.table-scroll {
+.table-scroll, .students-table-wrapper {
   width:100%;
   overflow-x:auto
 }
@@ -1772,3 +1772,100 @@ button,.button-link {
 }
 
 
+
+/* Shared layout constraints prevent wide content from stretching the page. */
+.main, .panel, .panel-header > *, .form-group, .settings-grid > *,
+.dashboard-grid > *, .profile > div { min-width: 0; }
+.sidebar { overflow-y: auto; overscroll-behavior: contain; }
+.settings-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.mobile-cell-label { display: none; }
+.responsive-table .cell-value { overflow-wrap: anywhere; }
+.panel-header > div:last-child { flex-wrap: wrap; }
+button:disabled { opacity: .6; cursor: not-allowed; }
+button:focus-visible, a:focus-visible { outline: 3px solid #258ce0; outline-offset: 3px; }
+
+@media (max-width: 768px) {
+  .main { padding: 12px; }
+  .main > *, .panel, .form-grid > *, .report-list { min-width: 0; max-width: 100%; }
+  .panel { padding: 14px; }
+  .panel-header { gap: 12px; }
+  .panel-header h3, .topbar h1 { overflow-wrap: anywhere; }
+  .profile-wrap { display: flex; gap: 8px; padding: 8px 0; border: 0; box-shadow: none; }
+  .profile { padding: 0; min-height: 44px; border: 0; box-shadow: none; background: transparent; }
+  .profile strong { font-size: 14px; overflow-wrap: anywhere; }
+  .profile small { font-size: 12px; }
+  .avatar { width: 40px; height: 40px; }
+  .avatar::before { width: 14px; height: 14px; top: 8px; }
+  .avatar::after { width: 24px; height: 13px; bottom: 6px; }
+  .logout-btn { width: auto; min-width: 58px; height: 44px; padding: 8px; font-size: 13px; color: #102d47; background: #fff; border-radius: 8px; }
+  .logout-btn::before { content: none; }
+  .notification-btn, .icon-btn, .menu-toggle, .modal-close { min-width: 44px; min-height: 44px; }
+  .topbar p { font-size: 12px; }
+  .category-toolbar, .referral-toolbar, .category-form, .referral-form-row,
+  .form-actions, .report-header, .inline-form { gap: 10px; flex-wrap: wrap; }
+  .category-toolbar input, .category-form input, .inline-form input,
+  .referral-toolbar input, .referral-form-row input { min-width: 0; width: 100%; }
+  input:not([type="checkbox"]):not([type="radio"]), select, textarea { max-width: 100%; font-size: 16px; }
+  .student-month-filter { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px !important; }
+  .student-month-filter .form-group, .student-month-filter button { min-width: 0 !important; width: 100%; }
+  .student-month-filter button { height: auto !important; min-height: 44px; white-space: normal; padding: 10px; }
+  .table-scroll, .students-table-wrapper { max-width: 100%; }
+  table.responsive-table, .table-panel table.responsive-table {
+    display: block; width: 100%; min-width: 0; border: 0;
+  }
+  .responsive-table thead {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip-path: inset(50%); white-space: nowrap;
+  }
+  .responsive-table tbody { display: grid; gap: 14px; }
+  .responsive-table tbody tr {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    border: 1px solid #dfe7f0; border-radius: 12px; padding: 12px; gap: 12px;
+    background: #fff;
+  }
+  .responsive-table tbody td {
+    display: block; min-width: 0; width: auto; padding: 0;
+    border: 0; text-align: left; white-space: normal; overflow-wrap: anywhere;
+  }
+  .responsive-table .mobile-cell-label {
+    display: block; font-size: 11px; font-weight: 600; color: #53677d;
+    margin-bottom: 4px; line-height: 1.4;
+  }
+  .responsive-table .cell-value { font-size: 14px; line-height: 1.5; }
+  .responsive-table td:last-child, .responsive-table .mobile-full-cell,
+  .responsive-table .student-name-cell { grid-column: 1 / -1; }
+  .responsive-table .student-name-cell strong { font-size: 18px; color: #102d47; }
+  .responsive-table td:last-child .cell-value { display: flex; flex-wrap: wrap; gap: 8px; }
+  .student-action-buttons { display: flex; flex-wrap: wrap; gap: 10px; }
+  .modal-backdrop, .student-detail-modal { padding: 10px; align-items: center; }
+  .modal, .student-detail-content {
+    width: 100%; min-width: 0; max-width: 100%; max-height: calc(100dvh - 20px);
+    overflow-y: auto; overscroll-behavior: contain; padding: 16px;
+  }
+  .modal-header, .student-modal-header { gap: 12px; align-items: flex-start; }
+  .modal-header h3, .student-modal-header h3 { font-size: 22px; overflow-wrap: anywhere; }
+  .modal-close, .student-modal-header > button { flex-shrink: 0; }
+  .form-grid, .student-details-grid { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .form-actions > button { flex: 1; min-height: 44px; }
+  .detail-box { min-height: 80px; padding: 14px; }
+  .setting-row { gap: 12px; }
+  .setting-row > div { min-width: 0; }
+  .setting-row .switch { flex-shrink: 0; }
+  .setting-row .link-btn { overflow-wrap: normal; flex-shrink: 0; max-width: 100px; }
+  .login-screen { padding: 20px 12px; min-height: 100dvh; }
+  .login-card { width: 100%; padding: 24px 20px; margin: auto; }
+  .pagination { justify-content: center; gap: 10px; flex-wrap: wrap; }
+}
+.sidebar-close { display: none; }
+@media (max-width: 768px) {
+  .sidebar-close { display: block; position: absolute; right: 8px; top: 8px; width: 44px; height: 44px; border: 0; background: transparent; color: #fff; font-size: 28px; }
+}
+@media (max-width: 768px) {
+  .student-modal-header > div, .modal-header > div { min-width: 0; flex: 1; }
+  .student-modal-header > button, .modal-header > button { width: auto; min-width: 44px; max-width: 80px; }
+  .student-modal-header { flex-wrap: wrap; }
+  .student-modal-header h3 { word-break: normal; overflow-wrap: normal; }
+  .student-detail-content, .modal { scrollbar-gutter: stable; }
+}
+
+.student-action-buttons .icon-btn { width: auto; min-width: 64px; padding: 8px 10px; font-size: 13px; }

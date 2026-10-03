@@ -65,11 +65,14 @@ export default function Login() {
 
       navigate("/dashboard");
     } catch (error) {
-      console.error("Login failed:", error);
-
-      const message =
-        error?.response?.data?.message ||
-        "Invalid username or password. Please try again.";
+      const status = error?.response?.status;
+      const message = status === 401
+        ? "Username or password is incorrect. Use your current academy account. If you cannot sign in, ask the owner to reset your access."
+        : !error?.response
+        ? "Cannot reach the login server. Check your connection and try again."
+        : status >= 500
+        ? "The login server is unavailable. Please try again shortly."
+        : error?.response?.data?.message || "Login failed. Please try again.";
 
       setError(message);
     } finally {

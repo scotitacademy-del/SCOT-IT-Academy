@@ -1,6 +1,7 @@
+import { ResponsiveTable } from "../components/Ui";
 import React, {
   useEffect,
-  useRef,
+  useMemo,
   useState,
 } from "react";
 
@@ -99,39 +100,21 @@ const formatDateForInput = (date) => {
 
   const value = String(date).trim();
 
-  if (
-    /^\d{4}-\d{2}-\d{2}$/.test(value)
-  ) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return value;
   }
 
-  if (
-    /^\d{4}-\d{2}-\d{2}T/.test(value)
-  ) {
+  if (/^\d{4}-\d{2}-\d{2}T/.test(value)) {
     return value.substring(0, 10);
   }
 
-  if (
-    /^\d{2}-\d{2}-\d{4}$/.test(value)
-  ) {
-    const [
-      day,
-      month,
-      year,
-    ] = value.split("-");
-
+  if (/^\d{2}-\d{2}-\d{4}$/.test(value)) {
+    const [day, month, year] = value.split("-");
     return `${year}-${month}-${day}`;
   }
 
-  if (
-    /^\d{2}\/\d{2}\/\d{4}$/.test(value)
-  ) {
-    const [
-      day,
-      month,
-      year,
-    ] = value.split("/");
-
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
+    const [day, month, year] = value.split("/");
     return `${year}-${month}-${day}`;
   }
 
@@ -227,6 +210,11 @@ const normalize = (
 
     id: databaseId,
 
+    studentId:
+      student.studentId ||
+      student.student_id ||
+      "",
+
     displayStudentId:
       student.displayStudentId ||
       "",
@@ -260,9 +248,7 @@ const normalize = (
       "",
 
     totalFee,
-
     paidFee,
-
     balanceFee,
 
     dueDate:
@@ -458,7 +444,7 @@ const getStatusStyle = (
 export default function Students() {
 
   // ====================================================
-  // STUDENTS
+  // STUDENTS STATE
   // ====================================================
 
   const [
@@ -509,6 +495,15 @@ export default function Students() {
   ] = useState(null);
 
   // ====================================================
+  // SEARCH FILTER STATE
+  // ====================================================
+
+  const [
+    searchTerm,
+    setSearchTerm,
+  ] = useState("");
+
+  // ====================================================
   // CATEGORY
   // ====================================================
 
@@ -523,51 +518,63 @@ export default function Students() {
   ] = useState(false);
 
   // ====================================================
-  // CURRENT MONTH / YEAR
+  // CURRENT DATE (DYNAMIC REAL-TIME UPDATE)
+  // Automatically tracks current month and year so on October 1st,
+  // October becomes available, and on Jan 1st 2027, 2027 becomes available.
   // ====================================================
 
-  const getCurrentMonthYear =
-    () => {
-      const now =
-        new Date();
-
-      return {
-        month:
-          now.getMonth() +
-          1,
-
-        year:
-          now.getFullYear(),
-      };
+  const [currentDate, setCurrentDate] = useState(() => {
+    const now = new Date();
+    return {
+      month: now.getMonth() + 1,
+      year: now.getFullYear(),
     };
-
-  const initialDate =
-    getCurrentMonthYear();
+  });
 
   const [
     selectedMonth,
     setSelectedMonth,
   ] = useState(
-    initialDate.month
+    currentDate.month
   );
 
   const [
     selectedYear,
     setSelectedYear,
   ] = useState(
-    initialDate.year
+    currentDate.year
   );
 
-  const lastAutoDateRef =
-    useRef(
-      initialDate
-    );
+  // Periodic calendar checker (e.g. at midnight or rollover)
+  useEffect(() => {
+    const checkCalendar = () => {
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth() + 1;
+
+      setCurrentDate((prev) => {
+        if (
+          prev.year !== currentYear ||
+          prev.month !== currentMonth
+        ) {
+          return {
+            year: currentYear,
+            month: currentMonth,
+          };
+        }
+        return prev;
+      });
+    };
+
+    const timer = setInterval(checkCalendar, 60 * 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // ====================================================
-  // MONTHS
+  // MONTH NAMES
   // ====================================================
 
-  const monthNames = [
+  const allMonthNames = [
     "January",
     "February",
     "March",
@@ -583,28 +590,87 @@ export default function Students() {
   ];
 
   // ====================================================
-  // YEARS
+  // YEAR OPTIONS (AUTOMATIC STARTING FROM 2026 UP TO CURRENT YEAR)
+  // When 2027 arrives, 2027 is automatically added to the dropdown!
   // ====================================================
 
-  const START_YEAR = 2026;
+  const yearOptions = useMemo(() => {
+    const recordedYears = students.map(student => Number(String(student.joinDate || "").slice(0, 4)))
+      .filter(year => Number.isInteger(year) && year >= 1900 && year <= 9999);
+    const firstYear = Math.min(2026, currentDate.year, ...recordedYears);
+    const lastYear = Math.max(currentDate.year, ...recordedYears);
+    return Array.from({ length: lastYear - firstYear + 1 }, (_, index) => firstYear + index);
+  }, [students, currentDate.year]);
 
-  const currentYear =
-    new Date().getFullYear();
+  // ====================================================
+  // MONTH OPTIONS (AUTOMATIC UP TO CURRENT MONTH FOR CURRENT YEAR)
+  // In 2026, shows months up to September.
+  // On October 1st, October is automatically added!
+  // If a past year or Overall Year is chosen, all 12 months show.
+  // ====================================================
 
-  const yearOptions =
-    Array.from(
-      {
-        length: Math.max(
-          1,
-          currentYear -
-            START_YEAR +
-            1
-        ),
-      },
-      (_, index) =>
-        START_YEAR +
-        index
+  const availableMonths = useMemo(() => {
+    const isCurrentYear =
+      selectedYear === currentDate.year ||
+      (selectedYear !== "ALL" && Number(selectedYear) === currentDate.year);
+
+    // For current year (2026), only allow months up to current calendar month (e.g. Sept = 9)
+    // On Oct 1st, currentDate.month becomes 10, so October automatically appears!
+    const maxMonth = isCurrentYear ? currentDate.month : 12;
+
+    return allMonthNames
+      .map((name, index) => ({
+        name,
+        value: index + 1,
+      }))
+      .filter((item) => item.value <= maxMonth);
+  }, [selectedYear, currentDate.year, currentDate.month]);
+
+  // If selectedMonth is not in availableMonths, adjust gracefully
+  useEffect(() => {
+    if (selectedMonth !== "ALL") {
+      const isAvailable = availableMonths.some(
+        (m) => m.value === Number(selectedMonth)
+      );
+      if (!isAvailable && availableMonths.length > 0) {
+        setSelectedMonth(availableMonths[availableMonths.length - 1].value);
+      }
+    }
+  }, [availableMonths, selectedMonth]);
+
+  // ====================================================
+  // GET JOIN YEAR / MONTH HELPER
+  // ====================================================
+
+  const getStudentJoinMonthYear = (student) => {
+    const joinDate = formatDateForInput(
+      student.joinDate ||
+        student.join_date ||
+        ""
     );
+
+    if (!joinDate) {
+      return null;
+    }
+
+    const parts = joinDate.split("-");
+
+    if (parts.length !== 3) {
+      return null;
+    }
+
+    const year = Number(parts[0]);
+    const month = Number(parts[1]);
+
+    if (!year || !month) {
+      return null;
+    }
+
+    return {
+      year,
+      month,
+    };
+  };
 
   // ====================================================
   // LOAD CATEGORIES
@@ -612,32 +678,17 @@ export default function Students() {
 
   async function loadCategories() {
     try {
-      setCategoryLoading(
-        true
-      );
+      setCategoryLoading(true);
 
-      const response =
-        await categoryApi.list();
+      const response = await categoryApi.list();
+      const categoryList = normalizeCategories(response);
 
-      const categoryList =
-        normalizeCategories(
-          response
-        );
-
-      setCategories(
-        categoryList
-      );
+      setCategories(categoryList);
     } catch (error) {
-      console.error(
-        "Category API loading failed:",
-        error
-      );
-
+      console.error("Category API loading failed:", error);
       setCategories([]);
     } finally {
-      setCategoryLoading(
-        false
-      );
+      setCategoryLoading(false);
     }
   }
 
@@ -649,49 +700,24 @@ export default function Students() {
     try {
       setMessage("");
 
-      const response =
-        await studentApi.list();
+      const response = await studentApi.list();
 
       const apiData =
-        response?.data
-          ?.results ||
-        response?.data
-          ?.data ||
+        response?.data?.results ||
+        response?.data?.data ||
         response?.data ||
         [];
 
-      const apiStudents =
-        Array.isArray(
-          apiData
-        )
-          ? apiData.map(
-              normalize
-            )
-          : [];
+      const apiStudents = Array.isArray(apiData)
+        ? apiData.map(normalize)
+        : [];
 
-      setStudents(
-        mergeStudents(
-          apiStudents
-        )
-      );
-
+      setStudents(mergeStudents(apiStudents));
       setPage(1);
     } catch (error) {
-      console.error(
-        "Student API loading failed:",
-        error
-      );
-
-      console.error(
-        "Student API error response:",
-        error.response?.data
-      );
-
+      console.error("Student API loading failed:", error);
       setStudents([]);
-
-      setMessage(
-        "Unable to load students. Please check the API connection."
-      );
+      setMessage("Unable to load students. Please check the API connection.");
     }
   }
 
@@ -705,491 +731,190 @@ export default function Students() {
   }, []);
 
   // ====================================================
-  // GET JOIN YEAR / MONTH
+  // STUDENTS WITH PERSISTED IDS
+  // Keep identifiers stable across filtering, pagination and deletion.
   // ====================================================
 
-  const getStudentJoinMonthYear =
-    (student) => {
-      const joinDate =
-        formatDateForInput(
-          student.joinDate ||
-            student.join_date ||
-            ""
+  const studentsWithIds = useMemo(() => {
+    return [...students]
+      .sort((a, b) => {
+        const idA = Number(a.id) || 0;
+        const idB = Number(b.id) || 0;
+
+        if (idA && idB) {
+          return idA - idB;
+        }
+
+        return String(a.joinDate || "").localeCompare(
+          String(b.joinDate || "")
         );
+      })
+      .map((student) => {
+        const displayStudentId = student.studentId || student.id;
 
-      if (!joinDate) {
-        return null;
-      }
-
-      const parts =
-        joinDate.split("-");
-
-      if (
-        parts.length !==
-        3
-      ) {
-        return null;
-      }
-
-      const year =
-        Number(parts[0]);
-
-      const month =
-        Number(parts[1]);
-
-      if (
-        !year ||
-        !month
-      ) {
-        return null;
-      }
-
-      return {
-        year,
-        month,
-      };
-    };
+        return {
+          ...student,
+          displayStudentId,
+        };
+      });
+  }, [students]);
 
   // ====================================================
-  // FILTER + SORT
+  // FILTER + SORT (YEAR, MONTH, SEARCH)
   // ====================================================
 
-  const filteredStudents =
-    students
-      .filter((student) => {
-        const date =
-          getStudentJoinMonthYear(
-            student
-          );
+  const filteredStudents = useMemo(() => {
+    return studentsWithIds.filter((student) => {
+      // 1. Year and Month filter
+      const isOverallYear = selectedYear === "ALL";
+      const isOverallMonth = selectedMonth === "ALL";
+
+      if (!isOverallYear || !isOverallMonth) {
+        const date = getStudentJoinMonthYear(student);
 
         if (!date) {
           return false;
         }
 
-        return (
-          date.year ===
-            Number(
-              selectedYear
-            ) &&
-          date.month ===
-            Number(
-              selectedMonth
-            )
-        );
-      })
-      .sort((a, b) => {
-        const idA =
-          Number(a.id) || 0;
+        if (!isOverallYear && date.year !== Number(selectedYear)) {
+          return false;
+        }
 
-        const idB =
-          Number(b.id) || 0;
+        if (!isOverallMonth && date.month !== Number(selectedMonth)) {
+          return false;
+        }
+      }
 
-        return idA - idB;
-      })
-      .map(
-        (student, index) => ({
-          ...student,
+      // 2. Search query filter
+      const q = searchTerm.trim().toLowerCase();
 
-          displayStudentId:
-            (page - 1) * 10 +
-            index +
-            1,
-        })
-      );
+      if (q) {
+        const studentId = String(student.displayStudentId || "").toLowerCase();
+        const name = String(student.name || "").toLowerCase();
+        const course = String(student.course || "").toLowerCase();
+        const mobile = String(student.mobile || "").toLowerCase();
+        const email = String(student.email || "").toLowerCase();
+        const city = String(student.city || "").toLowerCase();
+        const category = String(student.category || "").toLowerCase();
+        const status = String(student.status || "").toLowerCase();
+        const joinDate = String(student.joinDate || "").toLowerCase();
+        const dueDate = String(student.dueDate || "").toLowerCase();
 
-  // ====================================================
-  // ALL STUDENTS FOR EXCEL
-  // ====================================================
+        const matchesSearch =
+          studentId.includes(q) ||
+          name.includes(q) ||
+          course.includes(q) ||
+          mobile.includes(q) ||
+          email.includes(q) ||
+          city.includes(q) ||
+          category.includes(q) ||
+          status.includes(q) ||
+          joinDate.includes(q) ||
+          dueDate.includes(q);
 
-  const allStudentsForExcel =
-    [...students]
-      .sort((a, b) => {
-        const idA =
-          Number(a.id) || 0;
+        if (!matchesSearch) {
+          return false;
+        }
+      }
 
-        const idB =
-          Number(b.id) || 0;
-
-        return idA - idB;
-      })
-      .map(
-        (student, index) => ({
-          ...student,
-
-          excelStudentId:
-            index + 1,
-        })
-      );
+      return true;
+    });
+  }, [studentsWithIds, selectedYear, selectedMonth, searchTerm]);
 
   // ====================================================
-  // RESET PAGE
+  // RESET PAGE ON FILTER / SEARCH CHANGE
   // ====================================================
 
   useEffect(() => {
     setPage(1);
-  }, [
-    selectedMonth,
-    selectedYear,
-  ]);
-
-  // ====================================================
-  // AUTOMATIC MONTH / YEAR UPDATE
-  // ====================================================
-
-  useEffect(() => {
-    const timer =
-      setInterval(
-        () => {
-          const current =
-            getCurrentMonthYear();
-
-          const previous =
-            lastAutoDateRef.current;
-
-          const calendarChanged =
-            current.month !==
-              previous.month ||
-            current.year !==
-              previous.year;
-
-          if (
-            !calendarChanged
-          ) {
-            return;
-          }
-
-          const stillUsingPrevious =
-            selectedMonth ===
-              previous.month &&
-            selectedYear ===
-              previous.year;
-
-          if (
-            stillUsingPrevious
-          ) {
-            setSelectedMonth(
-              current.month
-            );
-
-            setSelectedYear(
-              current.year
-            );
-
-            loadStudents();
-          }
-
-          lastAutoDateRef.current =
-            current;
-        },
-        60 * 60 * 1000
-      );
-
-    return () =>
-      clearInterval(
-        timer
-      );
-  }, [
-    selectedMonth,
-    selectedYear,
-  ]);
+  }, [selectedMonth, selectedYear, searchTerm]);
 
   // ====================================================
   // PAGINATION
   // ====================================================
 
-  const visibleStudents =
-    filteredStudents.slice(
-      (page - 1) * 10,
-      page * 10
-    );
+  useEffect(() => {
+    setPage(current => Math.min(current, Math.max(1, Math.ceil(filteredStudents.length / 10))));
+  }, [filteredStudents.length]);
+
+  const visibleStudents = filteredStudents.slice(
+    (page - 1) * 10,
+    page * 10
+  );
 
   // ====================================================
-  // CSV ESCAPE
+  // DOWNLOAD EXCEL FILE (.xlsx)
+  // Join Date located before Student Name
+  // When Overall is selected, exports all year and month data
   // ====================================================
 
-  function escapeCsvValue(
-    value
-  ) {
-    const stringValue =
-      String(
-        value ?? ""
-      );
-
-    return `"${stringValue.replace(
-      /"/g,
-      '""'
-    )}"`;
-  }
-
-  // ====================================================
-  // DOWNLOAD SELECTED MONTH CSV
-  // ====================================================
-
-  function downloadSelectedMonthStudents() {
-    if (
-      filteredStudents.length ===
-      0
-    ) {
-      alert(
-        `No students found for ${
-          monthNames[
-            selectedMonth - 1
-          ]
-        } ${selectedYear}.`
-      );
-
-      return;
-    }
-
-    const headers = [
-      "Student ID",
-      "Student Name",
-      "Course",
-      "Mobile",
-      "Email",
-      "City",
-      "Category",
-      "Total Fee",
-      "Paid Fee",
-      "Balance Fee",
-      "Due Date",
-      "Join Date",
-      "Next Follow-up Date",
-      "Status",
-    ];
-
-    const rows =
-      filteredStudents.map(
-        (student) => {
-          const totalFee =
-            Number(
-              student.totalFee
-            ) || 0;
-
-          const paidFee =
-            Number(
-              student.paidFee
-            ) || 0;
-
-          const balanceFee =
-            calculateBalanceFee(
-              totalFee,
-              paidFee
-            );
-
-          return [
-            student.displayStudentId ||
-              "",
-            student.name ||
-              "",
-            student.course ||
-              "",
-            student.mobile ||
-              "",
-            student.email ||
-              "",
-            student.city ||
-              "",
-            student.category ||
-              "",
-            totalFee,
-            paidFee,
-            balanceFee,
-            student.dueDate ||
-              "",
-            student.joinDate ||
-              "",
-            getNextFollowUpDate(
-              student
-            ),
-            normalizeStatus(
-              student.status
-            ),
-          ].map(
-            escapeCsvValue
-          );
-        }
-      );
-
-    const csvContent = [
-      headers
-        .map(
-          escapeCsvValue
-        )
-        .join(","),
-      ...rows.map(
-        (row) =>
-          row.join(",")
-      ),
-    ].join("\r\n");
-
-    const blob =
-      new Blob(
-        [
-          "\uFEFF" +
-            csvContent,
-        ],
-        {
-          type:
-            "text/csv;charset=utf-8;",
-        }
-      );
-
-    const url =
-      URL.createObjectURL(
-        blob
-      );
-
-    const link =
-      document.createElement(
-        "a"
-      );
-
-    link.href = url;
-
-    link.download =
-      `Students-${
-        monthNames[
-          selectedMonth - 1
-        ]
-      }-${selectedYear}.csv`;
-
-    document.body.appendChild(
-      link
-    );
-
-    link.click();
-
-    document.body.removeChild(
-      link
-    );
-
-    URL.revokeObjectURL(
-      url
-    );
-  }
-
-  // ====================================================
-  // EXPORT ALL STUDENTS TO EXCEL
-  // ====================================================
-
-  function exportAllStudentsToExcel() {
-    if (
-      allStudentsForExcel.length ===
-      0
-    ) {
-      alert(
-        "No student data available to export."
-      );
-
+  function downloadFilteredExcel() {
+    if (filteredStudents.length === 0) {
+      alert("No student data available to export for the current filters.");
       return;
     }
 
     try {
       setExportingExcel(true);
 
-      const excelData =
-        allStudentsForExcel.map(
-          (student) => {
-            const totalFee =
-              Number(
-                student.totalFee
-              ) || 0;
+      const excelData = filteredStudents.map((student) => {
+        const totalFee = Number(student.totalFee) || 0;
+        const paidFee = Number(student.paidFee) || 0;
+        const balanceFee = calculateBalanceFee(totalFee, paidFee);
 
-            const paidFee =
-              Number(
-                student.paidFee
-              ) || 0;
+        return {
+          "Student ID": student.displayStudentId || "",
+          "Join Date": student.joinDate || "",
+          "Student Name": student.name || "",
+          "Course": student.course || "",
+          "Mobile": student.mobile || "",
+          "Email": student.email || "",
+          "City": student.city || "",
+          "Category": student.category || "",
+          "Total Fee": totalFee,
+          "Paid Fee": paidFee,
+          "Balance Fee": balanceFee,
+          "Due Date": student.dueDate || "",
+          "Next Follow-up Date": getNextFollowUpDate(student),
+          "Status": normalizeStatus(student.status),
+        };
+      });
 
-            const balanceFee =
-              calculateBalanceFee(
-                totalFee,
-                paidFee
-              );
+      const worksheet = XLSX.utils.json_to_sheet(excelData);
+      const workbook = XLSX.utils.book_new();
 
-            return {
-              "Student ID":
-                student.excelStudentId,
-
-              "Database ID":
-                student.id || "",
-
-              "Student Name":
-                student.name || "",
-
-              "Course":
-                student.course || "",
-
-              "Mobile":
-                student.mobile || "",
-
-              "Email":
-                student.email || "",
-
-              "City":
-                student.city || "",
-
-              "Category":
-                student.category || "",
-
-              "Total Fee":
-                totalFee,
-
-              "Paid Fee":
-                paidFee,
-
-              "Balance Fee":
-                balanceFee,
-
-              "Due Date":
-                student.dueDate || "",
-
-              "Join Date":
-                student.joinDate || "",
-
-              "Next Follow-up Date":
-                getNextFollowUpDate(
-                  student
-                ),
-
-              "Status":
-                normalizeStatus(
-                  student.status
-                ),
-            };
-          }
-        );
-
-      const worksheet =
-        XLSX.utils.json_to_sheet(
-          excelData
-        );
-
-      const workbook =
-        XLSX.utils.book_new();
+      let sheetName = "Students";
+      if (selectedYear === "ALL" && selectedMonth === "ALL") {
+        sheetName = "All Students";
+      } else if (selectedMonth === "ALL") {
+        sheetName = `Year ${selectedYear}`;
+      } else if (selectedYear === "ALL") {
+        sheetName = `${allMonthNames[selectedMonth - 1]}`;
+      } else {
+        sheetName = `${allMonthNames[selectedMonth - 1]} ${selectedYear}`;
+      }
 
       XLSX.utils.book_append_sheet(
         workbook,
         worksheet,
-        "All Students"
+        sheetName.slice(0, 31)
       );
 
       worksheet["!cols"] = [
-        { wch: 12 },
-        { wch: 12 },
-        { wch: 25 },
-        { wch: 30 },
-        { wch: 16 },
-        { wch: 30 },
-        { wch: 20 },
-        { wch: 28 },
-        { wch: 15 },
-        { wch: 15 },
-        { wch: 16 },
-        { wch: 15 },
-        { wch: 15 },
-        { wch: 22 },
-        { wch: 15 },
+        { wch: 14 }, // Student ID
+        { wch: 14 }, // Join Date
+        { wch: 25 }, // Student Name
+        { wch: 25 }, // Course
+        { wch: 16 }, // Mobile
+        { wch: 28 }, // Email
+        { wch: 18 }, // City
+        { wch: 22 }, // Category
+        { wch: 14 }, // Total Fee
+        { wch: 14 }, // Paid Fee
+        { wch: 14 }, // Balance Fee
+        { wch: 14 }, // Due Date
+        { wch: 20 }, // Next Follow-up Date
+        { wch: 14 }, // Status
       ];
 
       worksheet["!freeze"] = {
@@ -1197,46 +922,36 @@ export default function Students() {
         ySplit: 1,
       };
 
-      const now =
-        new Date();
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}-${String(
+        now.getMonth() + 1
+      ).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
-      const year =
-        now.getFullYear();
+      let filePrefix = "SCOT-IT-Academy-Students";
+      if (selectedYear === "ALL" && selectedMonth === "ALL") {
+        filePrefix += "-Overall";
+      } else if (selectedMonth === "ALL") {
+        filePrefix += `-${selectedYear}-Overall-Month`;
+      } else if (selectedYear === "ALL") {
+        filePrefix += `-${allMonthNames[selectedMonth - 1]}-Overall-Year`;
+      } else {
+        filePrefix += `-${allMonthNames[selectedMonth - 1]}-${selectedYear}`;
+      }
 
-      const month =
-        String(
-          now.getMonth() + 1
-        ).padStart(2, "0");
+      const fileName = `${filePrefix}-${dateStr}.xlsx`;
 
-      const day =
-        String(
-          now.getDate()
-        ).padStart(2, "0");
-
-      const fileName =
-        `SCOT-IT-Academy-All-Students-${year}-${month}-${day}.xlsx`;
-
-      XLSX.writeFile(
-        workbook,
-        fileName
-      );
+      XLSX.writeFile(workbook, fileName);
 
       setMessage(
-        `Excel exported successfully. ${allStudentsForExcel.length} student records downloaded.`
+        `Excel exported successfully: ${filteredStudents.length} student records downloaded.`
       );
 
       setTimeout(() => {
         setMessage("");
       }, 3000);
     } catch (error) {
-      console.error(
-        "Excel export failed:",
-        error
-      );
-
-      alert(
-        "Unable to export Excel file."
-      );
+      console.error("Excel export failed:", error);
+      alert("Unable to export Excel file.");
     } finally {
       setExportingExcel(false);
     }
@@ -1247,10 +962,7 @@ export default function Students() {
   // ====================================================
 
   function change(event) {
-    const {
-      name,
-      value,
-    } = event.target;
+    const { name, value } = event.target;
 
     setForm((prev) => {
       const next = {
@@ -1258,27 +970,15 @@ export default function Students() {
         [name]: value,
       };
 
-      if (
-        name ===
-          "paidFee" ||
-        name ===
-          "totalFee"
-      ) {
-        next.balanceFee =
-          calculateBalanceFee(
-            next.totalFee,
-            next.paidFee
-          );
+      if (name === "paidFee" || name === "totalFee") {
+        next.balanceFee = calculateBalanceFee(
+          next.totalFee,
+          next.paidFee
+        );
       }
 
-      if (
-        name ===
-        "status"
-      ) {
-        next.status =
-          normalizeStatus(
-            value
-          );
+      if (name === "status") {
+        next.status = normalizeStatus(value);
       }
 
       return next;
@@ -1289,315 +989,177 @@ export default function Students() {
   // ADD / EDIT STUDENT
   // ====================================================
 
-  async function addStudent(
-    event
-  ) {
+  async function addStudent(event) {
     event.preventDefault();
 
     setSaving(true);
     setMessage("");
 
-    const editedDueDate =
-      formatDateForInput(
-        form.dueDate
-      );
+    const editedDueDate = formatDateForInput(form.dueDate);
 
-    const editedJoinDate =
-      formatDateForInput(
-        form.joinDate ||
-          editingStudent?.joinDate ||
-          editingStudent?.join_date ||
-          ""
-      );
+    const editedJoinDate = formatDateForInput(
+      form.joinDate ||
+        editingStudent?.joinDate ||
+        editingStudent?.join_date ||
+        ""
+    );
 
-    const editedNextFollowUpDate =
-      formatDateForInput(
-        form.nextFollowUpDate ||
-          editingStudent?.nextFollowUpDate ||
-          editingStudent?.next_follow_up_date ||
-          ""
-      );
+    const editedNextFollowUpDate = formatDateForInput(
+      form.nextFollowUpDate ||
+        editingStudent?.nextFollowUpDate ||
+        editingStudent?.next_follow_up_date ||
+        ""
+    );
 
-    const editedTotalFee =
-      Number(
-        form.totalFee
-      ) || 0;
+    const editedTotalFee = Number(form.totalFee) || 0;
+    const editedPaidFee = Number(form.paidFee) || 0;
+    const editedBalanceFee = calculateBalanceFee(
+      editedTotalFee,
+      editedPaidFee
+    );
 
-    const editedPaidFee =
-      Number(
-        form.paidFee
-      ) || 0;
-
-    const editedBalanceFee =
-      calculateBalanceFee(
-        editedTotalFee,
-        editedPaidFee
-      );
-
-    if (
-      editedPaidFee >
-      editedTotalFee
-    ) {
-      setMessage(
-        "Paid Fee cannot be greater than Total Fee."
-      );
-
+    if (editedPaidFee > editedTotalFee) {
+      setMessage("Paid Fee cannot be greater than Total Fee.");
       setSaving(false);
-
       return;
     }
 
-    const selectedCategory =
-      String(
-        form.category || ""
-      ).trim();
+    const selectedCategory = String(form.category || "").trim();
 
-    if (
-      !selectedCategory
-    ) {
-      setMessage(
-        "Please select a category."
-      );
-
+    if (!selectedCategory) {
+      setMessage("Please select a category.");
       setSaving(false);
-
       return;
     }
 
-    const selectedStatus =
-      normalizeStatus(
-        form.status
-      );
+    const selectedStatus = normalizeStatus(form.status);
 
     const studentData = {
-      name:
-        form.name,
-
-      course:
-        form.course,
-
-      mobile:
-        form.mobile,
-
-      email:
-        form.email,
-
-      city:
-        form.city,
-
-      category:
-        selectedCategory,
-
-      totalFee:
-        editedTotalFee,
-
-      paidFee:
-        editedPaidFee,
-
-      balanceFee:
-        editedBalanceFee,
-
-      dueDate:
-        editedDueDate,
-
-      joinDate:
-        editedJoinDate,
-
-      nextFollowUpDate:
-        editedNextFollowUpDate,
-
-      status:
-        selectedStatus,
+      name: form.name,
+      course: form.course,
+      mobile: form.mobile,
+      email: form.email,
+      city: form.city,
+      category: selectedCategory,
+      totalFee: editedTotalFee,
+      paidFee: editedPaidFee,
+      balanceFee: editedBalanceFee,
+      dueDate: editedDueDate,
+      joinDate: editedJoinDate,
+      nextFollowUpDate: editedNextFollowUpDate,
+      status: selectedStatus,
     };
+
+    if (form.studentId) {
+      studentData.studentId = form.studentId;
+      studentData.student_id = form.studentId;
+    }
 
     // ==================================================
     // EDIT STUDENT
     // ==================================================
 
-    if (
-      editingStudent
-    ) {
+    if (editingStudent) {
       try {
         let updatedStudent;
 
         if (
           editingStudent.id &&
-          !String(
-            editingStudent.id
-          ).startsWith(
-            "local-"
-          )
+          !String(editingStudent.id).startsWith("local-")
         ) {
-          const response =
-            await studentApi.update(
-              editingStudent.id,
-              studentData
-            );
+          const response = await studentApi.update(
+            editingStudent.id,
+            studentData
+          );
 
-          const apiResponse =
-            response.data || {};
+          const apiResponse = response.data || {};
 
-          updatedStudent =
-            normalize({
-              ...editingStudent,
-              ...apiResponse,
-
-              id:
-                editingStudent.id,
-
-              category:
-                selectedCategory,
-
-              totalFee:
-                editedTotalFee,
-
-              paidFee:
-                editedPaidFee,
-
-              balanceFee:
-                editedBalanceFee,
-
-              dueDate:
-                apiResponse.dueDate ||
-                apiResponse.due_date ||
-                editedDueDate,
-
-              joinDate:
-                apiResponse.joinDate ||
-                apiResponse.join_date ||
-                editedJoinDate,
-
-              nextFollowUpDate:
-                apiResponse.nextFollowUpDate ||
-                apiResponse.next_follow_up_date ||
-                editedNextFollowUpDate,
-
-              status:
-                apiResponse.status ||
-                selectedStatus,
-            });
+          updatedStudent = normalize({
+            ...editingStudent,
+            ...apiResponse,
+            id: editingStudent.id,
+            category: selectedCategory,
+            totalFee: editedTotalFee,
+            paidFee: editedPaidFee,
+            balanceFee: editedBalanceFee,
+            dueDate:
+              apiResponse.dueDate ||
+              apiResponse.due_date ||
+              editedDueDate,
+            joinDate:
+              apiResponse.joinDate ||
+              apiResponse.join_date ||
+              editedJoinDate,
+            nextFollowUpDate:
+              apiResponse.nextFollowUpDate ||
+              apiResponse.next_follow_up_date ||
+              editedNextFollowUpDate,
+            status: apiResponse.status || selectedStatus,
+          });
         } else {
-          updatedStudent =
-            normalize({
-              ...editingStudent,
-              ...studentData,
-
-              id:
-                editingStudent.id,
-            });
+          updatedStudent = normalize({
+            ...editingStudent,
+            ...studentData,
+            id: editingStudent.id,
+          });
         }
 
         updatedStudent = {
           ...updatedStudent,
-
-          id:
-            editingStudent.id,
-
-          category:
-            selectedCategory,
-
-          totalFee:
-            editedTotalFee,
-
-          paidFee:
-            editedPaidFee,
-
-          balanceFee:
-            editedBalanceFee,
-
+          id: editingStudent.id,
+          displayStudentId: editingStudent.displayStudentId,
+          category: selectedCategory,
+          totalFee: editedTotalFee,
+          paidFee: editedPaidFee,
+          balanceFee: editedBalanceFee,
           dueDate:
-            editedDueDate ||
-            updatedStudent.dueDate ||
-            "",
-
+            editedDueDate || updatedStudent.dueDate || "",
           joinDate:
-            editedJoinDate ||
-            updatedStudent.joinDate ||
-            "",
-
+            editedJoinDate || updatedStudent.joinDate || "",
           nextFollowUpDate:
             editedNextFollowUpDate ||
             updatedStudent.nextFollowUpDate ||
             "",
-
-          status:
-            selectedStatus,
+          status: selectedStatus,
         };
 
-        setStudents(
-          (prev) =>
-            prev.map(
-              (item) =>
-                String(
-                  item.id
-                ) ===
-                String(
-                  editingStudent.id
-                )
-                  ? {
-                      ...item,
-                      ...updatedStudent,
-                      id:
-                        editingStudent.id,
-                    }
-                  : item
-            )
+        setStudents((prev) =>
+          prev.map((item) =>
+            String(item.id) === String(editingStudent.id)
+              ? {
+                  ...item,
+                  ...updatedStudent,
+                  id: editingStudent.id,
+                }
+              : item
+          )
         );
 
         if (
           selected &&
-          String(
-            selected.id
-          ) ===
-            String(
-              editingStudent.id
-            )
+          String(selected.id) === String(editingStudent.id)
         ) {
-          setSelected(
-            updatedStudent
-          );
+          setSelected(updatedStudent);
         }
 
-        setMessage(
-          "Student details updated successfully."
-        );
+        setMessage("Student details updated successfully.");
 
         setTimeout(() => {
-          setFormOpen(
-            false
-          );
-
-          setEditingStudent(
-            null
-          );
-
-          setForm({
-            ...initialForm,
-          });
-
+          setFormOpen(false);
+          setEditingStudent(null);
+          setForm({ ...initialForm });
           setMessage("");
         }, 800);
       } catch (error) {
-        console.error(
-          "Student update failed:",
-          error
-        );
-
-        console.error(
-          "API error response:",
-          error.response?.data
-        );
-
+        console.error("Student update failed:", error);
         setMessage(
-          error?.response?.data
-            ?.message ||
+          error?.response?.data?.message ||
             error?.message ||
             "Unable to update student. Please check the API connection."
         );
       }
 
       setSaving(false);
-
       return;
     }
 
@@ -1606,55 +1168,25 @@ export default function Students() {
     // ==================================================
 
     try {
-      const response =
-        await studentApi.create(
-          studentData
-        );
+      const response = await studentApi.create(studentData);
+      const savedStudent = normalize(response.data);
 
-      const savedStudent =
-        normalize(
-          response.data
-        );
-
-      setStudents(
-        (prev) =>
-          mergeStudents([
-            ...prev,
-            savedStudent,
-          ])
+      setStudents((prev) =>
+        mergeStudents([...prev, savedStudent])
       );
 
-      setMessage(
-        "Student added successfully."
-      );
+      setMessage("Student added successfully.");
 
       setTimeout(() => {
-        setFormOpen(
-          false
-        );
-
-        setForm({
-          ...initialForm,
-        });
-
+        setFormOpen(false);
+        setForm({ ...initialForm });
         setMessage("");
-
         loadStudents();
       }, 800);
     } catch (error) {
-      console.error(
-        "Student create failed:",
-        error
-      );
-
-      console.error(
-        "API error response:",
-        error.response?.data
-      );
-
+      console.error("Student create failed:", error);
       setMessage(
-        error?.response?.data
-          ?.message ||
+        error?.response?.data?.message ||
           error?.message ||
           "Unable to save student. Please check the API connection."
       );
@@ -1667,169 +1199,81 @@ export default function Students() {
   // VIEW
   // ====================================================
 
-  function openView(
-    student
-  ) {
-    setSelected(
-      student
-    );
+  function openView(student) {
+    setSelected(student);
   }
 
   // ====================================================
   // EDIT
   // ====================================================
 
-  function openEdit(
-    student
-  ) {
+  function openEdit(student) {
     loadCategories();
+    setEditingStudent(student);
 
-    setEditingStudent(
-      student
-    );
-
-    const totalFee =
-      Number(
-        student.totalFee
-      ) || 0;
-
-    const paidFee =
-      Number(
-        student.paidFee
-      ) || 0;
-
-    const balanceFee =
-      calculateBalanceFee(
-        totalFee,
-        paidFee
-      );
+    const totalFee = Number(student.totalFee) || 0;
+    const paidFee = Number(student.paidFee) || 0;
+    const balanceFee = calculateBalanceFee(totalFee, paidFee);
 
     setForm({
-      studentId:
-        student.displayStudentId ||
-        "",
-
-      name:
-        student.name || "",
-
-      course:
-        student.course || "",
-
-      mobile:
-        student.mobile || "",
-
-      email:
-        student.email || "",
-
-      city:
-        student.city || "",
-
-      category:
-        student.category || "",
-
+      studentId: student.displayStudentId || "",
+      name: student.name || "",
+      course: student.course || "",
+      mobile: student.mobile || "",
+      email: student.email || "",
+      city: student.city || "",
+      category: student.category || "",
       totalFee,
-
       paidFee,
-
       balanceFee,
-
-      dueDate:
-        formatDateForInput(
-          student.dueDate ||
-            student.due_date ||
-            ""
-        ),
-
-      joinDate:
-        formatDateForInput(
-          student.joinDate ||
-            student.join_date ||
-            ""
-        ),
-
-      nextFollowUpDate:
-        getNextFollowUpDate(
-          student
-        ),
-
-      status:
-        normalizeStatus(
-          student.status
-        ),
+      dueDate: formatDateForInput(
+        student.dueDate || student.due_date || ""
+      ),
+      joinDate: formatDateForInput(
+        student.joinDate || student.join_date || ""
+      ),
+      nextFollowUpDate: getNextFollowUpDate(student),
+      status: normalizeStatus(student.status),
     });
 
     setMessage("");
-
-    setFormOpen(
-      true
-    );
+    setFormOpen(true);
   }
 
   // ====================================================
   // DELETE
   // ====================================================
 
-  async function remove(
-    student
-  ) {
-    const confirmDelete =
-      window.confirm(
-        `Are you sure you want to delete ${student.name}?`
-      );
+  async function remove(student) {
+    const confirmDelete = window.confirm(
+      `Are you sure you want to delete ${student.name}?`
+    );
 
-    if (
-      !confirmDelete
-    ) {
+    if (!confirmDelete) {
       return;
     }
 
     try {
       if (
         student.id &&
-        !String(
-          student.id
-        ).startsWith(
-          "local-"
-        )
+        !String(student.id).startsWith("local-")
       ) {
-        await studentApi.delete(
-          student.id
-        );
+        await studentApi.delete(student.id);
       }
 
-      setStudents(
-        (prev) =>
-          prev.filter(
-            (item) =>
-              String(
-                item.id
-              ) !==
-              String(
-                student.id
-              )
-          )
+      setStudents((prev) =>
+        prev.filter((item) => String(item.id) !== String(student.id))
       );
 
       if (
         selected &&
-        String(
-          selected.id
-        ) ===
-          String(
-            student.id
-          )
+        String(selected.id) === String(student.id)
       ) {
         setSelected(null);
       }
     } catch (error) {
-      console.error(
-        "Delete student failed:",
-        error
-      );
-
-      alert(
-        "Unable to delete student. Please check the API connection."
-      );
+      console.error("Delete student failed:", error);
+      alert("Unable to delete student. Please check the API connection.");
     }
   }
 
@@ -1838,18 +1282,9 @@ export default function Students() {
   // ====================================================
 
   function closeForm() {
-    setFormOpen(
-      false
-    );
-
-    setEditingStudent(
-      null
-    );
-
-    setForm({
-      ...initialForm,
-    });
-
+    setFormOpen(false);
+    setEditingStudent(null);
+    setForm({ ...initialForm });
     setMessage("");
   }
 
@@ -1859,258 +1294,323 @@ export default function Students() {
 
   function openAddStudent() {
     loadCategories();
+    setEditingStudent(null);
 
-    setEditingStudent(
-      null
-    );
+    // The API assigns the next SCOT ID when the record is saved.
 
     setForm({
       ...initialForm,
-
-      studentId:
-        "",
-
-      category:
-        "",
-
-      status:
-        "Active",
+      studentId: "",
+      category: "",
+      status: "Active",
     });
 
-    setFormOpen(
-      true
-    );
-
+    setFormOpen(true);
     setMessage("");
   }
 
+  useEffect(() => {
+    if (!formOpen && !selected) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = event => {
+      if (event.key === "Escape" && !saving) { setFormOpen(false); setSelected(null); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => { document.body.style.overflow = previous; document.removeEventListener("keydown", onKey); };
+  }, [formOpen, selected, saving]);
+
   // ====================================================
-  // UI
+  // OVERALL STATUS CHECK
+  // ====================================================
+
+  const isOverall =
+    selectedYear === "ALL" && selectedMonth === "ALL";
+
+  // ====================================================
+  // UI RENDER
   // ====================================================
 
   return (
     <>
       {/* ==================================================
-          YEAR / MONTH FILTER
-      ================================================== */}
-
-      <div
-        className="student-month-filter"
-        style={{
-          display:
-            "flex",
-
-          justifyContent:
-            "flex-end",
-
-          alignItems:
-            "flex-end",
-
-          gap: "12px",
-
-          flexWrap:
-            "wrap",
-
-          width: "100%",
-
-          marginBottom:
-            "18px",
-        }}
-      >
-        <div
-          className="form-group"
-          style={{
-            marginBottom: 0,
-          }}
-        >
-          <label>
-            Year
-          </label>
-
-          <select
-            value={
-              selectedYear
-            }
-            onChange={(
-              event
-            ) => {
-              setSelectedYear(
-                Number(
-                  event.target
-                    .value
-                )
-              );
-            }}
-          >
-            {yearOptions.map(
-              (year) => (
-                <option
-                  key={year}
-                  value={year}
-                >
-                  {year}
-                </option>
-              )
-            )}
-          </select>
-        </div>
-
-        <div
-          className="form-group"
-          style={{
-            marginBottom: 0,
-          }}
-        >
-          <label>
-            Month
-          </label>
-
-          <select
-            value={
-              selectedMonth
-            }
-            onChange={(
-              event
-            ) => {
-              setSelectedMonth(
-                Number(
-                  event.target
-                    .value
-                )
-              );
-            }}
-          >
-            {monthNames.map(
-              (
-                month,
-                index
-              ) => (
-                <option
-                  key={month}
-                  value={
-                    index + 1
-                  }
-                >
-                  {month}
-                </option>
-              )
-            )}
-          </select>
-        </div>
-
-        {/* DOWNLOAD CURRENT MONTH CSV */}
-
-        <button
-          type="button"
-          className="secondary"
-          onClick={
-            downloadSelectedMonthStudents
-          }
-          style={{
-            height:
-              "44px",
-
-            marginBottom:
-              0,
-          }}
-        >
-          Download{" "}
-          {
-            monthNames[
-              selectedMonth -
-                1
-            ]
-          }{" "}
-          {selectedYear}
-        </button>
-
-        {/* EXPORT ALL STUDENTS EXCEL */}
-
-        <button
-          type="button"
-          className="primary"
-          onClick={
-            exportAllStudentsToExcel
-          }
-          disabled={
-            exportingExcel
-          }
-          style={{
-            height:
-              "44px",
-
-            marginBottom:
-              0,
-
-            minWidth:
-              "170px",
-          }}
-        >
-          {exportingExcel
-            ? "Exporting..."
-            : "📊 Export All Excel"}
-        </button>
-      </div>
-
-      {/* ==================================================
           STUDENTS PANEL
       ================================================== */}
 
       <Panel
-        title="Students Details"
+        title={
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              flexWrap: "wrap",
+            }}
+          >
+            <span>Students Details</span>
+
+            <span
+              style={{
+                fontSize: "12px",
+                fontWeight: 600,
+                color: "#1e40af",
+                background: "#dbeafe",
+                padding: "3px 10px",
+                borderRadius: "12px",
+              }}
+            >
+              {filteredStudents.length}{" "}
+              {filteredStudents.length === 1 ? "student" : "students"}
+            </span>
+
+            {isOverall && (
+              <span
+                style={{
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  color: "#065f46",
+                  background: "#d1fae5",
+                  padding: "3px 10px",
+                  borderRadius: "12px",
+                }}
+              >
+                Overall (All Years & All Months)
+              </span>
+            )}
+
+            {!isOverall && (
+              <span
+                style={{
+                  fontSize: "12px",
+                  fontWeight: 500,
+                  color: "#4b5563",
+                  background: "#f3f4f6",
+                  padding: "3px 10px",
+                  borderRadius: "12px",
+                }}
+              >
+                {selectedMonth === "ALL"
+                  ? "All Months"
+                  : allMonthNames[selectedMonth - 1]}{" "}
+                {selectedYear === "ALL"
+                  ? "All Years"
+                  : selectedYear}
+              </span>
+            )}
+          </div>
+        }
         subtitle="Students and their fee details"
         action={
           <button
             type="button"
             className="primary"
-            onClick={
-              openAddStudent
-            }
+            onClick={openAddStudent}
           >
             + Add Student
           </button>
         }
       >
+        {/* ==================================================
+            FILTERS (INSIDE TABLE SESSION, NO TITLES)
+        ================================================== */}
+
+        <div
+          className="student-filter-toolbar"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            flexWrap: "wrap",
+            width: "100%",
+            marginBottom: "16px",
+          }}
+        >
+          {/* SEARCH FILTER INPUT (NO TITLE) */}
+          <div
+            style={{
+              position: "relative",
+              display: "flex",
+              alignItems: "center",
+              flex: "1 1 240px",
+              minWidth: "200px",
+            }}
+          >
+            <input
+              type="text"
+              aria-label="Search students"
+              placeholder="Search ID (SCOT-001), name, course, mobile..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{
+                width: "100%",
+                height: "42px",
+                paddingRight: searchTerm ? "36px" : "12px",
+                borderRadius: "8px",
+                border: "1px solid #d1d5db",
+                fontSize: "14px",
+              }}
+            />
+
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                title="Clear search"
+                style={{
+                  position: "absolute",
+                  right: "8px",
+                  background: "transparent",
+                  border: "none",
+                  fontSize: "18px",
+                  color: "#9ca3af",
+                  cursor: "pointer",
+                  padding: "4px 8px",
+                  lineHeight: 1,
+                }}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* YEAR FILTER (NO TITLE) */}
+          <div
+            style={{
+              minWidth: "140px",
+              flex: "0 1 150px",
+            }}
+          >
+            <select
+              id="student-year" aria-label="Year"
+              value={selectedYear}
+              onChange={(event) => {
+                const val = event.target.value;
+                setSelectedYear(val === "ALL" ? "ALL" : Number(val));
+              }}
+              style={{
+                height: "42px",
+                borderRadius: "8px",
+                border: "1px solid #d1d5db",
+                fontSize: "14px",
+                width: "100%",
+              }}
+            >
+              <option value="ALL">Overall Year</option>
+              {yearOptions.map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* MONTH FILTER (NO TITLE) */}
+          <div
+            style={{
+              minWidth: "150px",
+              flex: "0 1 160px",
+            }}
+          >
+            <select
+              id="student-month" aria-label="Month"
+              value={selectedMonth}
+              onChange={(event) => {
+                const val = event.target.value;
+                setSelectedMonth(val === "ALL" ? "ALL" : Number(val));
+              }}
+              style={{
+                height: "42px",
+                borderRadius: "8px",
+                border: "1px solid #d1d5db",
+                fontSize: "14px",
+                width: "100%",
+              }}
+            >
+              <option value="ALL">Overall Month</option>
+              {availableMonths.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* DOWNLOAD EXCEL FILE (.xlsx) */}
+          <button
+            type="button"
+            className="primary"
+            onClick={downloadFilteredExcel}
+            disabled={exportingExcel}
+            title="Download currently filtered students as Excel (.xlsx)"
+            style={{
+              height: "42px",
+              marginBottom: 0,
+              whiteSpace: "nowrap",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              fontWeight: 600,
+              borderRadius: "8px",
+            }}
+          >
+            {exportingExcel
+              ? "Exporting..."
+              : isOverall
+              ? "Download Overall Excel"
+              : "Download Excel"}
+          </button>
+        </div>
+
         <div className="students-table-wrapper">
-          <table className="students-table">
+          <ResponsiveTable className="students-table">
             <thead>
               <tr>
+                {/* 1. STUDENT ID */}
                 <th>
                   Student ID
                 </th>
 
-                <th>
-                  Student Name
-                </th>
-
-                <th>
-                  Course
-                </th>
-
-                <th>
-                  Total Fee
-                </th>
-
-                <th>
-                  Paid Fee
-                </th>
-
-                <th>
-                  Balance Fee
-                </th>
-
-                <th>
-                  Due Date
-                </th>
-
+                {/* 2. JOIN DATE (Located before Student Name) */}
                 <th>
                   Join Date
                 </th>
 
+                {/* 3. STUDENT NAME */}
+                <th>
+                  Student Name
+                </th>
+
+                {/* 4. COURSE */}
+                <th>
+                  Course
+                </th>
+
+                {/* 5. TOTAL FEE */}
+                <th>
+                  Total Fee
+                </th>
+
+                {/* 6. PAID FEE */}
+                <th>
+                  Paid Fee
+                </th>
+
+                {/* 7. BALANCE FEE */}
+                <th>
+                  Balance Fee
+                </th>
+
+                {/* 8. DUE DATE */}
+                <th>
+                  Due Date
+                </th>
+
+                {/* 9. STATUS */}
                 <th>
                   Status
                 </th>
 
+                {/* 10. ACTION */}
                 <th className="action-column">
                   Action
                 </th>
@@ -2118,224 +1618,194 @@ export default function Students() {
             </thead>
 
             <tbody>
-              {visibleStudents.length >
-              0 ? (
-                visibleStudents.map(
-                  (
-                    student
-                  ) => {
-                    const totalFee =
-                      Number(
-                        student.totalFee
-                      ) || 0;
+              {visibleStudents.length > 0 ? (
+                visibleStudents.map((student) => {
+                  const totalFee =
+                    Number(student.totalFee) || 0;
 
-                    const paidFee =
-                      Number(
-                        student.paidFee
-                      ) || 0;
+                  const paidFee =
+                    Number(student.paidFee) || 0;
 
-                    const balanceFee =
-                      calculateBalanceFee(
-                        totalFee,
-                        paidFee
-                      );
-
-                    const status =
-                      normalizeStatus(
-                        student.status
-                      );
-
-                    const statusStyle =
-                      getStatusStyle(
-                        status
-                      );
-
-                    return (
-                      <tr
-                        key={
-                          student.id ||
-                          studentKey(
-                            student
-                          )
-                        }
-                      >
-                        <td className="student-id-cell">
-                          {student.displayStudentId ||
-                            "-"}
-                        </td>
-
-                        <td className="student-name-cell">
-                          <strong>
-                            {student.name ||
-                              "-"}
-                          </strong>
-                        </td>
-
-                        <td>
-                          {student.course ||
-                            "-"}
-                        </td>
-
-                        <td className="total-fee-cell">
-                          ₹
-                          {formatMoney(
-                            totalFee
-                          )}
-                        </td>
-
-                        <td className="fee-cell">
-                          ₹
-                          {formatMoney(
-                            paidFee
-                          )}
-                        </td>
-
-                        <td className="fee-cell">
-                          ₹
-                          {formatMoney(
-                            balanceFee
-                          )}
-                        </td>
-
-                        <td className="date-cell">
-                          {student.dueDate ||
-                            "-"}
-                        </td>
-
-                        <td className="date-cell">
-                          {student.joinDate ||
-                            "-"}
-                        </td>
-
-                        {/* ==================================
-                            UPDATED STATUS COLOR
-                        ================================== */}
-
-                        <td>
-                          <span
-                            style={{
-                              display:
-                                "inline-block",
-
-                              padding:
-                                "6px 12px",
-
-                              borderRadius:
-                                "999px",
-
-                              fontSize:
-                                "12px",
-
-                              fontWeight:
-                                700,
-
-                              minWidth:
-                                "75px",
-
-                              textAlign:
-                                "center",
-
-                              background:
-                                statusStyle.background,
-
-                              color:
-                                statusStyle.color,
-
-                              border:
-                                statusStyle.border,
-                            }}
-                          >
-                            {status}
-                          </span>
-                        </td>
-
-                        <td className="action-column">
-                          <div className="student-action-buttons">
-                            <button
-                              type="button"
-                              className="icon-btn view-action"
-                              title="View"
-                              onClick={() =>
-                                openView(
-                                  student
-                                )
-                              }
-                            >
-                              👁
-                            </button>
-
-                            <button
-                              type="button"
-                              className="icon-btn edit-action"
-                              title="Edit"
-                              onClick={() =>
-                                openEdit(
-                                  student
-                                )
-                              }
-                            >
-                              ✎
-                            </button>
-
-                            <button
-                              type="button"
-                              className="icon-btn delete-btn"
-                              title="Delete"
-                              onClick={() =>
-                                remove(
-                                  student
-                                )
-                              }
-                            >
-                              🗑
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+                  const balanceFee =
+                    calculateBalanceFee(
+                      totalFee,
+                      paidFee
                     );
-                  }
-                )
+
+                  const status =
+                    normalizeStatus(student.status);
+
+                  const statusStyle =
+                    getStatusStyle(status);
+
+                  return (
+                    <tr
+                      key={
+                        student.id ||
+                        studentKey(student)
+                      }
+                    >
+                      {/* 1. STUDENT ID (Matches screenshot: bold, dark, sequential SCOT-001, SCOT-002...) */}
+                      <td className="student-id-cell">
+                        <span
+                          style={{
+                            fontWeight: 700,
+                            fontSize: "14px",
+                            letterSpacing: "0.5px",
+                            color: "#0a2540",
+                            fontFamily:
+                              'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+                            display: "inline-block",
+                          }}
+                        >
+                          {student.displayStudentId}
+                        </span>
+                      </td>
+
+                      {/* 2. JOIN DATE (Located before Student Name) */}
+                      <td className="date-cell">
+                        {student.joinDate || "-"}
+                      </td>
+
+                      {/* 3. STUDENT NAME */}
+                      <td className="student-name-cell">
+                        <strong>
+                          {student.name || "-"}
+                        </strong>
+                      </td>
+
+                      {/* 4. COURSE */}
+                      <td>
+                        {student.course || "-"}
+                      </td>
+
+                      {/* 5. TOTAL FEE */}
+                      <td className="total-fee-cell">
+                        ₹{formatMoney(totalFee)}
+                      </td>
+
+                      {/* 6. PAID FEE */}
+                      <td className="fee-cell">
+                        ₹{formatMoney(paidFee)}
+                      </td>
+
+                      {/* 7. BALANCE FEE */}
+                      <td className="fee-cell">
+                        ₹{formatMoney(balanceFee)}
+                      </td>
+
+                      {/* 8. DUE DATE */}
+                      <td className="date-cell">
+                        {student.dueDate || "-"}
+                      </td>
+
+                      {/* 9. STATUS */}
+                      <td>
+                        <span
+                          style={{
+                            display: "inline-block",
+                            padding: "6px 12px",
+                            borderRadius: "999px",
+                            fontSize: "12px",
+                            fontWeight: 700,
+                            minWidth: "75px",
+                            textAlign: "center",
+                            background: statusStyle.background,
+                            color: statusStyle.color,
+                            border: statusStyle.border,
+                          }}
+                        >
+                          {status}
+                        </span>
+                      </td>
+
+                      {/* 10. ACTION */}
+                      <td className="action-column">
+                        <div className="student-action-buttons">
+                          <button
+                            type="button"
+                            className="icon-btn view-action"
+                            title="View" aria-label={`View ${student.name}`}
+                            onClick={() => openView(student)}
+                          >
+                            View
+                          </button>
+
+                          <button
+                            type="button"
+                            className="icon-btn edit-action"
+                            title="Edit" aria-label={`Edit ${student.name}`}
+                            onClick={() => openEdit(student)}
+                          >
+                            Edit
+                          </button>
+
+                          <button
+                            type="button"
+                            className="icon-btn delete-btn"
+                            title="Delete" aria-label={`Delete ${student.name}`}
+                            onClick={() => remove(student)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
                   <td
                     colSpan="10"
                     className="no-students"
+                    style={{
+                      textAlign: "center",
+                      padding: "24px",
+                      color: "#6b7280",
+                    }}
                   >
-                    No students found
-                    for{" "}
-                    {
-                      monthNames[
-                        selectedMonth -
-                          1
-                      ]
-                    }{" "}
-                    {selectedYear}.
+                    {searchTerm ? (
+                      <>
+                        No students found matching "
+                        <strong>{searchTerm}</strong>".
+                      </>
+                    ) : isOverall ? (
+                      "No students found in the academy records."
+                    ) : selectedMonth === "ALL" ? (
+                      `No students found for year ${selectedYear}.`
+                    ) : selectedYear === "ALL" ? (
+                      `No students found for ${
+                        allMonthNames[selectedMonth - 1]
+                      } (all years).`
+                    ) : (
+                      `No students found for ${
+                        allMonthNames[selectedMonth - 1]
+                      } ${selectedYear}.`
+                    )}
                   </td>
                 </tr>
               )}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
 
         <Pagination
           page={page}
           setPage={setPage}
-          total={
-            filteredStudents.length
-          }
+          perPage={10}
+          total={filteredStudents.length}
         />
       </Panel>
 
       {/* ==================================================
-          MESSAGE
+          FEEDBACK MESSAGE
       ================================================== */}
 
       {message && !formOpen && (
         <div
           className="success-message"
           style={{
-            marginTop:
-              "12px",
+            marginTop: "12px",
           }}
         >
           {message}
@@ -2349,20 +1819,13 @@ export default function Students() {
       {formOpen && (
         <div
           className="modal-backdrop"
-          onClick={
-            closeForm
-          }
+          onClick={closeForm}
         >
           <form
             className="modal edit-modal students-modal"
-            onSubmit={
-              addStudent
-            }
-            onClick={(
-              event
-            ) =>
-              event.stopPropagation()
-            }
+            role="dialog" aria-modal="true" aria-label={editingStudent ? "Edit student" : "Add student"}
+            onSubmit={addStudent}
+            onClick={(event) => event.stopPropagation()}
           >
             <div className="modal-header">
               <div>
@@ -2381,186 +1844,136 @@ export default function Students() {
 
               <button
                 type="button"
-                className="modal-close"
-                onClick={
-                  closeForm
-                }
+                className="modal-close" aria-label="Close student form"
+                onClick={closeForm}
               >
                 ×
               </button>
             </div>
 
             <div className="form-grid">
-
               {/* STUDENT ID */}
-
               <div className="form-group">
-                <label>
+                <label htmlFor="student-studentId">
                   Student ID
                 </label>
 
                 <input
-                  name="studentId"
-                  value={
-                    form.studentId ??
-                    ""
-                  }
+                  name="studentId" id="student-studentId"
+                  value={form.studentId ?? ""}
                   type="text"
                   readOnly
                   disabled
-                  placeholder={
-                    editingStudent
-                      ? "Student ID"
-                      : "Auto Generated"
-                  }
+                  placeholder="Auto generated on save"
                   style={{
-                    backgroundColor:
-                      "#f3f4f6",
-
-                    cursor:
-                      "not-allowed",
+                    backgroundColor: "#f3f4f6",
+                    cursor: "not-allowed",
+                    fontFamily: "monospace",
+                    fontWeight: 700,
                   }}
                 />
 
                 <small
                   style={{
-                    display:
-                      "block",
-
-                    marginTop:
-                      "5px",
-
-                    color:
-                      "#667085",
-
-                    fontSize:
-                      "12px",
+                    display: "block",
+                    marginTop: "5px",
+                    color: "#667085",
+                    fontSize: "12px",
                   }}
                 >
                   {editingStudent
-                    ? "Student ID cannot be changed."
-                    : "Student ID will be generated automatically."}
+                    ? "Student ID is unique and cannot be modified."
+                    : "Auto-generated sequence starting with SCOT-001."}
                 </small>
               </div>
 
               {/* NAME */}
-
               <div className="form-group">
-                <label>
-                  Student Name
+                <label htmlFor="student-name">
+                  Student Name *
                 </label>
 
                 <input
-                  name="name"
-                  value={
-                    form.name ??
-                    ""
-                  }
-                  onChange={
-                    change
-                  }
+                  name="name" id="student-name"
+                  value={form.name ?? ""}
+                  onChange={change}
                   type="text"
+                  placeholder="Enter full name"
                   required
                 />
               </div>
 
               {/* COURSE */}
-
               <div className="form-group">
-                <label>
-                  Course
+                <label htmlFor="student-course">
+                  Course *
                 </label>
 
                 <input
-                  name="course"
-                  value={
-                    form.course ??
-                    ""
-                  }
-                  onChange={
-                    change
-                  }
+                  name="course" id="student-course"
+                  value={form.course ?? ""}
+                  onChange={change}
                   type="text"
+                  placeholder="e.g. Python Full Stack"
                   required
                 />
               </div>
 
               {/* MOBILE */}
-
               <div className="form-group">
-                <label>
+                <label htmlFor="student-mobile">
                   Mobile Number
                 </label>
 
                 <input
-                  name="mobile"
-                  value={
-                    form.mobile ??
-                    ""
-                  }
-                  onChange={
-                    change
-                  }
+                  name="mobile" id="student-mobile"
+                  value={form.mobile ?? ""}
+                  onChange={change}
                   type="tel"
+                  placeholder="10-digit mobile"
                 />
               </div>
 
               {/* EMAIL */}
-
               <div className="form-group">
-                <label>
+                <label htmlFor="student-email">
                   Email
                 </label>
 
                 <input
-                  name="email"
-                  value={
-                    form.email ??
-                    ""
-                  }
-                  onChange={
-                    change
-                  }
+                  name="email" id="student-email"
+                  value={form.email ?? ""}
+                  onChange={change}
                   type="email"
+                  placeholder="student@example.com"
                 />
               </div>
 
               {/* CITY */}
-
               <div className="form-group">
-                <label>
+                <label htmlFor="student-city">
                   City
                 </label>
 
                 <input
-                  name="city"
-                  value={
-                    form.city ??
-                    ""
-                  }
-                  onChange={
-                    change
-                  }
+                  name="city" id="student-city"
+                  value={form.city ?? ""}
+                  onChange={change}
                   type="text"
+                  placeholder="e.g. Chennai"
                 />
               </div>
 
               {/* TOTAL FEE */}
-
               <div className="form-group">
-                <label>
-                  Total Fee
+                <label htmlFor="student-totalFee">
+                  Total Fee *
                 </label>
 
                 <input
-                  name="totalFee"
-                  value={
-                    form.totalFee ??
-                    ""
-                  }
-                  onChange={
-                    change
-                  }
+                  name="totalFee" id="student-totalFee"
+                  value={form.totalFee ?? ""}
+                  onChange={change}
                   type="number"
                   min="0"
                   placeholder="Enter total fee"
@@ -2569,41 +1982,31 @@ export default function Students() {
               </div>
 
               {/* PAID FEE */}
-
               <div className="form-group">
-                <label>
-                  Paid Fee
+                <label htmlFor="student-paidFee">
+                  Paid Fee *
                 </label>
 
                 <input
-                  name="paidFee"
-                  value={
-                    form.paidFee ??
-                    ""
-                  }
-                  onChange={
-                    change
-                  }
+                  name="paidFee" id="student-paidFee"
+                  value={form.paidFee ?? ""}
+                  onChange={change}
                   type="number"
                   min="0"
-                  max={
-                    form.totalFee ||
-                    undefined
-                  }
+                  max={form.totalFee || undefined}
                   placeholder="Enter paid fee"
                   required
                 />
               </div>
 
               {/* BALANCE FEE */}
-
               <div className="form-group">
-                <label>
+                <label htmlFor="student-balanceFee">
                   Balance Fee
                 </label>
 
                 <input
-                  name="balanceFee"
+                  name="balanceFee" id="student-balanceFee"
                   value={calculateBalanceFee(
                     form.totalFee,
                     form.paidFee
@@ -2612,27 +2015,17 @@ export default function Students() {
                   readOnly
                   tabIndex="-1"
                   style={{
-                    backgroundColor:
-                      "#f3f4f6",
-
-                    cursor:
-                      "not-allowed",
+                    backgroundColor: "#f3f4f6",
+                    cursor: "not-allowed",
                   }}
                 />
 
                 <small
                   style={{
-                    display:
-                      "block",
-
-                    marginTop:
-                      "5px",
-
-                    color:
-                      "#667085",
-
-                    fontSize:
-                      "12px",
+                    display: "block",
+                    marginTop: "5px",
+                    color: "#667085",
+                    fontSize: "12px",
                   }}
                 >
                   Total Fee − Paid Fee
@@ -2640,21 +2033,15 @@ export default function Students() {
               </div>
 
               {/* CATEGORY */}
-
               <div className="form-group">
-                <label>
-                  Category
+                <label htmlFor="student-category">
+                  Category *
                 </label>
 
                 <select
-                  name="category"
-                  value={
-                    form.category ||
-                    ""
-                  }
-                  onChange={
-                    change
-                  }
+                  name="category" id="student-category"
+                  value={form.category || ""}
+                  onChange={change}
                   required
                 >
                   <option value="">
@@ -2663,124 +2050,85 @@ export default function Students() {
                       : "Select Category"}
                   </option>
 
-                  {categories.map(
-                    (
-                      category
-                    ) => (
-                      <option
-                        key={
-                          category
-                        }
-                        value={
-                          category
-                        }
-                      >
-                        {category}
-                      </option>
-                    )
-                  )}
+                  {categories.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              {/* DUE DATE */}
-
+              {/* JOIN DATE */}
               <div className="form-group">
-                <label>
+                <label htmlFor="student-joinDate">
+                  Join Date *
+                </label>
+
+                <input
+                  type="date"
+                  name="joinDate" id="student-joinDate"
+                  value={form.joinDate || ""}
+                  onChange={change}
+                  required
+                />
+              </div>
+
+              {/* DUE DATE */}
+              <div className="form-group">
+                <label htmlFor="student-dueDate">
                   Due Date
                 </label>
 
                 <input
                   type="date"
-                  name="dueDate"
-                  value={
-                    form.dueDate ||
-                    ""
-                  }
-                  onChange={
-                    change
-                  }
-                  required
+                  name="dueDate" id="student-dueDate"
+                  value={form.dueDate || ""}
+                  onChange={change}
                 />
               </div>
 
-              {/* JOIN DATE */}
-
+              {/* NEXT FOLLOW-UP DATE */}
               <div className="form-group">
-                <label>
-                  Join Date
+                <label htmlFor="student-nextFollowUpDate">
+                  Next Follow-up Date
                 </label>
 
                 <input
                   type="date"
-                  name="joinDate"
-                  value={
-                    form.joinDate ||
-                    ""
-                  }
-                  onChange={
-                    change
-                  }
-                  required={
-                    !editingStudent
-                  }
-                  readOnly={
-                    !!editingStudent
-                  }
+                  name="nextFollowUpDate" id="student-nextFollowUpDate"
+                  value={form.nextFollowUpDate || ""}
+                  onChange={change}
                 />
               </div>
 
               {/* STATUS */}
-
               <div className="form-group">
-                <label>
-                  Status
+                <label htmlFor="student-status">
+                  Status *
                 </label>
 
                 <select
-                  name="status"
-                  value={
-                    form.status ||
-                    "Active"
-                  }
-                  onChange={
-                    change
-                  }
+                  name="status" id="student-status"
+                  value={form.status || "Active"}
+                  onChange={change}
                   required
                 >
-                  {STATUS_OPTIONS.map(
-                    (
-                      status
-                    ) => (
-                      <option
-                        key={
-                          status
-                        }
-                        value={
-                          status
-                        }
-                      >
-                        {status}
-                      </option>
-                    )
-                  )}
+                  {STATUS_OPTIONS.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
 
-            {/* MESSAGE */}
-
+            {/* ERROR OR SUCCESS MESSAGE */}
             {message && (
               <div
                 className={
-                  message.includes(
-                    "Unable"
-                  ) ||
-                  message.includes(
-                    "Please select"
-                  ) ||
-                  message.includes(
-                    "cannot be greater"
-                  )
+                  message.includes("Unable") ||
+                  message.includes("Please select") ||
+                  message.includes("cannot be greater")
                     ? "error-message"
                     : "success-message"
                 }
@@ -2789,15 +2137,12 @@ export default function Students() {
               </div>
             )}
 
-            {/* ACTIONS */}
-
+            {/* FORM ACTIONS */}
             <div className="form-actions">
               <button
                 type="button"
                 className="secondary"
-                onClick={
-                  closeForm
-                }
+                onClick={closeForm}
               >
                 Close
               </button>
@@ -2805,10 +2150,7 @@ export default function Students() {
               <button
                 type="submit"
                 className="primary"
-                disabled={
-                  saving ||
-                  categoryLoading
-                }
+                disabled={saving || categoryLoading}
               >
                 {saving
                   ? "Saving..."
@@ -2822,25 +2164,18 @@ export default function Students() {
       )}
 
       {/* ==================================================
-          VIEW STUDENT
+          VIEW STUDENT MODAL (Join Date before Student Name)
       ================================================== */}
 
       {selected && (
         <div
           className="student-detail-modal"
-          onClick={() =>
-            setSelected(
-              null
-            )
-          }
+          onClick={() => setSelected(null)}
         >
           <div
             className="student-detail-content"
-            onClick={(
-              event
-            ) =>
-              event.stopPropagation()
-            }
+            role="dialog" aria-modal="true" aria-label="Student details"
+            onClick={(event) => event.stopPropagation()}
           >
             <div className="student-modal-header">
               <div>
@@ -2856,11 +2191,7 @@ export default function Students() {
               <button
                 type="button"
                 className="secondary small"
-                onClick={() =>
-                  setSelected(
-                    null
-                  )
-                }
+                onClick={() => setSelected(null)}
               >
                 Close
               </button>
@@ -2868,55 +2199,22 @@ export default function Students() {
 
             <div className="student-details-grid">
               {[
-                [
-                  "Student ID",
-                  selected.displayStudentId,
-                ],
-
-                [
-                  "Student Name",
-                  selected.name,
-                ],
-
-                [
-                  "Course",
-                  selected.course,
-                ],
-
-                [
-                  "Mobile",
-                  selected.mobile,
-                ],
-
-                [
-                  "Email",
-                  selected.email,
-                ],
-
-                [
-                  "City",
-                  selected.city,
-                ],
-
-                [
-                  "Category",
-                  selected.category,
-                ],
-
+                ["Student ID", selected.displayStudentId],
+                ["Join Date", selected.joinDate],
+                ["Student Name", selected.name],
+                ["Course", selected.course],
+                ["Mobile", selected.mobile],
+                ["Email", selected.email],
+                ["City", selected.city],
+                ["Category", selected.category],
                 [
                   "Total Fee",
-                  `₹${formatMoney(
-                    selected.totalFee
-                  )}`,
+                  `₹${formatMoney(selected.totalFee)}`,
                 ],
-
                 [
                   "Paid Fee",
-                  `₹${formatMoney(
-                    selected.paidFee
-                  )}`,
+                  `₹${formatMoney(selected.paidFee)}`,
                 ],
-
                 [
                   "Balance Fee",
                   `₹${formatMoney(
@@ -2926,57 +2224,43 @@ export default function Students() {
                     )
                   )}`,
                 ],
-
-                [
-                  "Due Date",
-                  selected.dueDate,
-                ],
-
-                [
-                  "Join Date",
-                  selected.joinDate,
-                ],
-
+                ["Due Date", selected.dueDate],
                 [
                   "Next Follow-up Date",
-                  getNextFollowUpDate(
-                    selected
-                  ),
+                  getNextFollowUpDate(selected),
                 ],
-
                 [
                   "Status",
-                  normalizeStatus(
-                    selected.status
-                  ),
+                  normalizeStatus(selected.status),
                 ],
-              ].map(
-                ([
-                  label,
-                  value,
-                ]) => (
-                  <div
-                    className={
-                      label ===
-                      "Total Fee"
-                        ? "detail-box total-detail-box"
-                        : "detail-box"
-                    }
-                    key={
-                      label
+              ].map(([label, value]) => (
+                <div
+                  className={
+                    label === "Total Fee"
+                      ? "detail-box total-detail-box"
+                      : "detail-box"
+                  }
+                  key={label}
+                >
+                  <span>{label}</span>
+
+                  <strong
+                    style={
+                      label === "Student ID"
+                        ? {
+                            fontFamily:
+                              'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                            fontSize: "14px",
+                            fontWeight: 700,
+                            color: "#0a2540",
+                          }
+                        : {}
                     }
                   >
-                    <span>
-                      {label}
-                    </span>
-
-                    <strong>
-                      {value ||
-                        "-"}
-                    </strong>
-                  </div>
-                )
-              )}
+                    {value || "-"}
+                  </strong>
+                </div>
+              ))}
             </div>
           </div>
         </div>

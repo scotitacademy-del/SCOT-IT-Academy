@@ -1,3 +1,4 @@
+import { ResponsiveTable } from "../components/Ui";
 import React, { useEffect, useState } from "react";
 import { enquiryApi } from "../services/api";
 import {
@@ -563,7 +564,7 @@ export default function FollowUps() {
         subtitle="Current follow-up data"
       >
         <div className="table-scroll">
-          <table>
+          <ResponsiveTable>
             <thead>
               <tr>
                 {[
@@ -648,7 +649,7 @@ export default function FollowUps() {
                 )
               )}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
 
         {activeRows.length ===

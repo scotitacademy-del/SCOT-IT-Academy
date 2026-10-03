@@ -30,7 +30,7 @@ export default function Admins() {
     event.preventDefault();
     const trimmedName = name.trim();
     const trimmedUsername = username.trim();
-    const trimmedPassword = password.trim();
+    const trimmedPassword = password;
 
     if (!trimmedName || !trimmedUsername || !trimmedPassword) {
       window.alert("Admin name, username and password are required.");
@@ -49,14 +49,14 @@ export default function Admins() {
   async function update() {
     const trimmedName = name.trim();
     const trimmedUsername = username.trim();
-    const trimmedPassword = password.trim();
-    if (!trimmedName || !trimmedUsername || !trimmedPassword) {
-      window.alert("Admin name, username and password are required.");
+    const trimmedPassword = password;
+    if (!trimmedName || !trimmedUsername) {
+      window.alert("Admin name and username are required.");
       return;
     }
 
     try {
-      await adminApi.update(editing.id, { name: trimmedName, username: trimmedUsername, password: trimmedPassword });
+      await adminApi.update(editing.id, { name: trimmedName, username: trimmedUsername, ...(trimmedPassword ? { password: trimmedPassword } : {}) });
       setEditing(null); setName(""); setUsername(""); setPassword(""); load();
     } catch (error) {
       const message = error?.response?.data?.message || error?.message || "Unable to update admin.";
@@ -75,8 +75,8 @@ export default function Admins() {
     }
   }
 
-  return <Panel title="Admins" subtitle="Manage enquiry administrators" action={<div className="inline-form"><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search admin..." /><button className="primary" onClick={() => {setName(""); setUsername(""); setPassword(""); setFormOpen(true);}}>+ Add Admin</button>{editing && <><input value={name} onChange={event => setName(event.target.value)} placeholder="Edit admin name" /><input value={username} onChange={event => setUsername(event.target.value)} placeholder="Edit username" /><input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="Edit password" /><button className="primary" onClick={update}>Update Admin</button><button className="secondary" onClick={() => {setEditing(null); setName(""); setUsername(""); setPassword("");}}>Cancel</button></>}</div>}>
-    <div className="category-grid">{visible.map(admin => <div className="category-card" key={admin.id}><div className="category-icon">♙</div><h3>{admin.name}</h3><p>{admin.username || admin.role || "Administrator"}</p><div className="card-actions"><button className="icon-btn" title="Edit" aria-label={`Edit ${admin.name}`} onClick={() => {setEditing(admin); setName(admin.name); setUsername(admin.username || ""); setPassword(admin.password || "");}}>✎</button><button className="icon-btn delete-btn" title="Delete" aria-label={`Delete ${admin.name}`} onClick={() => remove(admin)}>🗑</button></div></div>)}</div>
+  return <Panel title="Admins" subtitle="Manage enquiry administrators" action={<div className="inline-form"><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search admin..." /><button className="primary" onClick={() => {setName(""); setUsername(""); setPassword(""); setFormOpen(true);}}>+ Add Admin</button>{editing && <><input value={name} onChange={event => setName(event.target.value)} placeholder="Edit admin name" /><input value={username} onChange={event => setUsername(event.target.value)} placeholder="Edit username" /><input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="New password (leave blank to keep)" /><button className="primary" onClick={update}>Update Admin</button><button className="secondary" onClick={() => {setEditing(null); setName(""); setUsername(""); setPassword("");}}>Cancel</button></>}</div>}>
+    <div className="category-grid">{visible.map(admin => <div className="category-card" key={admin.id}><div className="category-icon">♙</div><h3>{admin.name}</h3><p>{admin.username || admin.role || "Administrator"}</p><div className="card-actions"><button className="icon-btn" title="Edit" aria-label={`Edit ${admin.name}`} onClick={() => {setEditing(admin); setName(admin.name); setUsername(admin.username || ""); setPassword("");}}>✎</button><button className="icon-btn delete-btn" title="Delete" aria-label={`Delete ${admin.name}`} onClick={() => remove(admin)}>🗑</button></div></div>)}</div>
     {visible.length === 0 && <div className="empty">No admins found.</div>}
     {formOpen && <div className="modal-backdrop" onClick={() => setFormOpen(false)}><form className="modal" onSubmit={add} onClick={event => event.stopPropagation()}><div className="modal-header"><div><h3>Add Admin</h3><p>Create a new enquiry administrator</p></div><button type="button" className="modal-close" onClick={() => setFormOpen(false)}>X</button></div><div className="form-group"><label>Admin Name</label><input autoFocus value={name} onChange={event => setName(event.target.value)} placeholder="Enter admin name" required /></div><div className="form-group"><label>Username</label><input value={username} onChange={event => setUsername(event.target.value)} placeholder="Enter username" required /></div><div className="form-group"><label>Password</label><input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="Enter password" required /></div><div className="form-actions"><button type="button" className="secondary" onClick={() => setFormOpen(false)}>Close</button><button className="primary">Add Admin</button></div></form></div>}
   </Panel>;

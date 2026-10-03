@@ -1,18 +1,24 @@
 import React, { useEffect, useState } from "react";
+
 import {
   enquiryApi,
   categoryApi,
-  adminApi,
-  referralApi,
 } from "../services/api";
+
 import { Panel } from "../components/Ui";
+
+// ======================================================
+// FIXED REFERRED BY OPTIONS
+// No Refer By API required
+// ======================================================
+
+import { REFERRED_BY_OPTIONS } from "../data/referralOptions";
 
 // ======================================================
 // INITIAL FORM
 // ======================================================
 
 const initialForm = {
-  admin: "",
   enquiry_date: "",
   candidate_name: "",
   mobile: "",
@@ -23,12 +29,13 @@ const initialForm = {
   comments: "",
   next_followup_date: "",
   status: "Pending",
-  referred_by: "",
+
+  // Default value
+  referred_by: "Direct Visit",
 };
 
 // ======================================================
 // DATE ONLY
-// HTML DATE INPUT REQUIRES YYYY-MM-DD
 // ======================================================
 
 function dateOnly(value) {
@@ -42,33 +49,33 @@ function dateOnly(value) {
     return "";
   }
 
-  // Already YYYY-MM-DD
+  // YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}$/.test(stringValue)) {
     return stringValue;
   }
 
   // ISO
-  // 2026-09-04T18:30:00.000Z
   if (/^\d{4}-\d{2}-\d{2}T/.test(stringValue)) {
     return stringValue.substring(0, 10);
   }
 
   // MySQL DATETIME
-  // 2026-09-04 18:30:00
   if (/^\d{4}-\d{2}-\d{2} /.test(stringValue)) {
     return stringValue.substring(0, 10);
   }
 
   // DD-MM-YYYY
   if (/^\d{2}-\d{2}-\d{4}$/.test(stringValue)) {
-    const [day, month, year] = stringValue.split("-");
+    const [day, month, year] =
+      stringValue.split("-");
 
     return `${year}-${month}-${day}`;
   }
 
   // DD/MM/YYYY
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(stringValue)) {
-    const [day, month, year] = stringValue.split("/");
+    const [day, month, year] =
+      stringValue.split("/");
 
     return `${year}-${month}-${day}`;
   }
@@ -78,9 +85,6 @@ function dateOnly(value) {
 
 // ======================================================
 // GET API ARRAY
-// Supports:
-// response.data
-// response.data.results
 // ======================================================
 
 function getArray(response) {
@@ -111,7 +115,6 @@ function getName(item) {
       item.name ||
         item.title ||
         item.category ||
-        item.admin ||
         ""
     ).trim();
   }
@@ -132,8 +135,6 @@ export default function AddEnquiry() {
   const [messageType, setMessageType] = useState("");
 
   const [categories, setCategories] = useState([]);
-  const [admins, setAdmins] = useState([]);
-  const [referrals, setReferrals] = useState([]);
 
   const [saving, setSaving] = useState(false);
 
@@ -146,7 +147,8 @@ export default function AddEnquiry() {
 
     async function loadCategories() {
       try {
-        const response = await categoryApi.list();
+        const response =
+          await categoryApi.list();
 
         if (!mounted) {
           return;
@@ -177,84 +179,6 @@ export default function AddEnquiry() {
   }, []);
 
   // ====================================================
-  // LOAD ADMINS
-  // ====================================================
-
-  useEffect(() => {
-    let mounted = true;
-
-    async function loadAdmins() {
-      try {
-        const response = await adminApi.list();
-
-        if (!mounted) {
-          return;
-        }
-
-        const values = getArray(response)
-          .map(getName)
-          .filter(Boolean);
-
-        setAdmins(values);
-      } catch (error) {
-        console.error(
-          "Admin loading error:",
-          error
-        );
-
-        if (mounted) {
-          setAdmins([]);
-        }
-      }
-    }
-
-    loadAdmins();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  // ====================================================
-  // LOAD REFERRALS
-  // ====================================================
-
-  useEffect(() => {
-    let mounted = true;
-
-    async function loadReferrals() {
-      try {
-        const response = await referralApi.list();
-
-        if (!mounted) {
-          return;
-        }
-
-        const values = getArray(response)
-          .map(getName)
-          .filter(Boolean);
-
-        setReferrals(values);
-      } catch (error) {
-        console.error(
-          "Referral loading error:",
-          error
-        );
-
-        if (mounted) {
-          setReferrals([]);
-        }
-      }
-    }
-
-    loadReferrals();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  // ====================================================
   // FORM CHANGE
   // ====================================================
 
@@ -266,7 +190,6 @@ export default function AddEnquiry() {
       [name]: value,
     }));
 
-    // Clear old message
     if (msg) {
       setMsg("");
       setMessageType("");
@@ -305,16 +228,15 @@ export default function AddEnquiry() {
       }
 
       // ----------------------------------------------
-      // CREATE PAYLOAD
+      // CREATE CLEAN PAYLOAD
+      //
+      // IMPORTANT:
+      // No email
+      // No admin
+      // No referral API
       // ----------------------------------------------
 
       const payload = {
-        ...form,
-
-        admin: String(
-          form.admin || ""
-        ).trim(),
-
         enquiry_date: dateOnly(
           form.enquiry_date
         ),
@@ -323,7 +245,7 @@ export default function AddEnquiry() {
           form.candidate_name || ""
         ).trim(),
 
-        mobile,
+        mobile: mobile,
 
         city: String(
           form.city || ""
@@ -341,8 +263,6 @@ export default function AddEnquiry() {
           form.course || ""
         ).trim(),
 
-        // IMPORTANT
-        // Comments are sent as a normal string
         comments: String(
           form.comments || ""
         ).trim(),
@@ -356,20 +276,25 @@ export default function AddEnquiry() {
         ).trim(),
 
         referred_by: String(
-          form.referred_by || ""
+          form.referred_by || "Direct Visit"
         ).trim(),
       };
 
+      console.log(
+        "Sending enquiry payload:",
+        payload
+      );
+
       // ----------------------------------------------
-      // API CREATE
+      // CREATE ENQUIRY
       // ----------------------------------------------
 
       const result =
         await enquiryApi.create(payload);
 
-      // Cache type in localStorage so it
-      // shows in EnquiryList even before
-      // backend is redeployed with type column
+      // ----------------------------------------------
+      // CACHE TYPE
+      // ----------------------------------------------
 
       const newId =
         result?.data?.id ||
@@ -390,8 +315,11 @@ export default function AddEnquiry() {
             "scot_it_enquiry_types",
             JSON.stringify(cache)
           );
-        } catch {
-          // ignore cache error
+        } catch (cacheError) {
+          console.warn(
+            "Type cache error:",
+            cacheError
+          );
         }
       }
 
@@ -406,6 +334,7 @@ export default function AddEnquiry() {
       setMessageType("success");
 
       // Reset form
+      // Direct Visit becomes default
       setForm({
         ...initialForm,
       });
@@ -420,14 +349,26 @@ export default function AddEnquiry() {
         error?.response?.data
       );
 
+      // ----------------------------------------------
+      // GET SERVER ERROR MESSAGE
+      // ----------------------------------------------
+
+      const serverData =
+        error?.response?.data;
+
       const apiMessage =
-        error?.response?.data?.message ||
-        error?.response?.data?.detail ||
-        error?.response?.data?.error ||
+        serverData?.message ||
+        serverData?.detail ||
+        serverData?.error ||
+        serverData?.sqlMessage ||
+        serverData?.errorMessage ||
         error?.message ||
         "Unable to save enquiry. Please check the API connection.";
 
-      setMsg(apiMessage);
+      setMsg(
+        String(apiMessage)
+      );
+
       setMessageType("error");
     } finally {
       setSaving(false);
@@ -460,6 +401,7 @@ export default function AddEnquiry() {
         onSubmit={submit}
         data-grammarly="false"
       >
+
         {/* ==================================================
             CANDIDATE INFORMATION
         ================================================== */}
@@ -469,16 +411,6 @@ export default function AddEnquiry() {
         </h4>
 
         <div className="form-grid">
-
-          {/* ADMIN */}
-
-          {/* <Select
-            name="admin"
-            label="Admin"
-            value={form.admin}
-            onChange={change}
-            options={admins}
-          /> */}
 
           {/* ENQUIRY DATE */}
 
@@ -541,6 +473,7 @@ export default function AddEnquiry() {
               "Others",
             ]}
           />
+
         </div>
 
         {/* ==================================================
@@ -573,11 +506,10 @@ export default function AddEnquiry() {
             placeholder="Python Full Stack"
           />
 
-          {/* ==================================================
-              COMMENTS / LAST DISCUSSION
-          ================================================== */}
+          {/* COMMENTS */}
 
           <div className="form-group full">
+
             <label>
               Comments / Last Discussion
             </label>
@@ -588,18 +520,15 @@ export default function AddEnquiry() {
               onChange={change}
               placeholder="Enter last discussion details..."
               rows={5}
-
-              /* Grammarly protection */
               data-grammarly="false"
               data-gr-ext-disabled="true"
               data-enable-grammarly="false"
-
-              /* Prevent browser spell checking */
               spellCheck={false}
-
               autoComplete="off"
             />
+
           </div>
+
         </div>
 
         {/* ==================================================
@@ -648,8 +577,11 @@ export default function AddEnquiry() {
             label="Referred By"
             value={form.referred_by}
             onChange={change}
-            options={referrals}
+            options={
+              REFERRED_BY_OPTIONS
+            }
           />
+
         </div>
 
         {/* ==================================================
@@ -694,6 +626,7 @@ export default function AddEnquiry() {
           </button>
 
         </div>
+
       </form>
     </Panel>
   );
@@ -710,10 +643,12 @@ function Input({
   onChange,
   ...props
 }) {
-  const required = label.includes("*");
+  const required =
+    label.includes("*");
 
   return (
     <div className="form-group">
+
       <label htmlFor={name}>
         {label}
       </label>
@@ -726,6 +661,7 @@ function Input({
         required={required}
         {...props}
       />
+
     </div>
   );
 }
@@ -751,10 +687,12 @@ function Select({
     ),
   ];
 
-  const required = label.includes("*");
+  const required =
+    label.includes("*");
 
   return (
     <div className="form-group">
+
       <label htmlFor={name}>
         {label}
       </label>
@@ -766,19 +704,25 @@ function Select({
         value={value ?? ""}
         onChange={onChange}
       >
+
         <option value="">
-          Select {label.replace(" *", "")}
+          Select{" "}
+          {label.replace(" *", "")}
         </option>
 
-        {cleanOptions.map((option) => (
-          <option
-            key={option}
-            value={option}
-          >
-            {option}
-          </option>
-        ))}
+        {cleanOptions.map(
+          (option) => (
+            <option
+              key={option}
+              value={option}
+            >
+              {option}
+            </option>
+          )
+        )}
+
       </select>
+
     </div>
   );
 }
