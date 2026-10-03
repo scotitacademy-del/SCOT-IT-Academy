@@ -736,27 +736,32 @@ export default function Students() {
   // ====================================================
 
   const studentsWithIds = useMemo(() => {
-    return [...students]
-      .sort((a, b) => {
-        const idA = Number(a.id) || 0;
-        const idB = Number(b.id) || 0;
+    const sorted = [...students].sort((a, b) => {
+      const idA = Number(a.id) || 0;
+      const idB = Number(b.id) || 0;
 
-        if (idA && idB) {
-          return idA - idB;
-        }
+      if (idA && idB) {
+        return idA - idB;
+      }
 
-        return String(a.joinDate || "").localeCompare(
-          String(b.joinDate || "")
-        );
-      })
-      .map((student) => {
-        const displayStudentId = student.studentId || student.id;
+      return String(a.joinDate || "").localeCompare(
+        String(b.joinDate || "")
+      );
+    });
 
-        return {
-          ...student,
-          displayStudentId,
-        };
-      });
+    return sorted.map((student, index) => {
+      let displayStudentId = String(student.studentId || student.student_id || student.id || "").trim();
+
+      // If it has old SCOT- format or lacks SCT prefix, format as continuous SCT sequential ID
+      if (!displayStudentId || displayStudentId.toUpperCase().startsWith("SCOT") || displayStudentId.includes("-")) {
+        displayStudentId = `SCT${String(index + 1).padStart(3, "0")}`;
+      }
+
+      return {
+        ...student,
+        displayStudentId,
+      };
+    });
   }, [students]);
 
   // ====================================================

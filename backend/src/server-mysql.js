@@ -683,6 +683,32 @@ app.get(
   auth,
   async (req, res, next) => {
     try {
+      // Fix any non-standard student_id (like SCOT-001) in DB on the fly
+      try {
+        const [allStudents] = await db.query(
+          "SELECT id, student_id FROM students ORDER BY id ASC"
+        );
+        let maxNum = 0;
+        for (const s of allStudents) {
+          const m = String(s.student_id || "").match(/^SCT(\d+)$/i);
+          if (m) {
+            const n = parseInt(m[1], 10);
+            if (n > maxNum) maxNum = n;
+          }
+        }
+        for (const s of allStudents) {
+          const sid = String(s.student_id || "").trim();
+          if (!sid.toUpperCase().startsWith("SCT") || sid.includes("-")) {
+            maxNum++;
+            const newId = `SCT${String(maxNum).padStart(3, "0")}`;
+            await db.query("UPDATE students SET student_id=? WHERE id=?", [newId, s.id]);
+            s.student_id = newId;
+          }
+        }
+      } catch (normErr) {
+        console.warn("Student ID check notice:", normErr.message);
+      }
+
       const [rows] =
         await db.query(
           `
@@ -757,16 +783,18 @@ app.post(
 
       let studentId = text(b.studentId ?? b.student_id);
       if (!studentId) {
-        // Extract the numeric portion from ANY existing student_id format
-        // (e.g. SCT001, SCOT-001, SCT-005) so IDs are always globally sequential.
-        const row = await first(`
-          SELECT COALESCE(MAX(
-            CAST(REGEXP_REPLACE(student_id, '[^0-9]', '') AS UNSIGNED)
-          ), 0) AS lastNumber
-          FROM students
-          WHERE student_id REGEXP '[0-9]+'
-        `);
-        studentId = `SCT${String(Number(row.lastNumber) + 1).padStart(3, "0")}`;
+        const [existing] = await db.query(
+          "SELECT student_id FROM students"
+        );
+        let maxNum = 0;
+        for (const s of existing) {
+          const numMatch = String(s.student_id || "").match(/\d+/);
+          if (numMatch) {
+            const val = parseInt(numMatch[0], 10);
+            if (val > maxNum) maxNum = val;
+          }
+        }
+        studentId = `SCT${String(maxNum + 1).padStart(3, "0")}`;
       }
 
       const dueDate =
@@ -3543,24 +3571,28 @@ async function initializeSchema() {
   // NORMALIZE EXISTING STUDENT IDs TO CONTINUOUS SCTxxx FORMAT
   // ==========================================================
   try {
-    const [scotRows] = await db.query(
-      "SELECT id, student_id FROM students WHERE student_id LIKE 'SCOT-%' OR student_id LIKE 'SCOT%' ORDER BY id ASC"
+    const [allStudents] = await db.query(
+      "SELECT id, student_id FROM students ORDER BY id ASC"
     );
-    for (const r of scotRows) {
-      const [maxRow] = await db.query(`
-        SELECT COALESCE(MAX(
-          CAST(REGEXP_REPLACE(student_id, '[^0-9]', '') AS UNSIGNED)
-        ), 0) AS maxNum
-        FROM students
-        WHERE student_id REGEXP '^SCT[0-9]+$'
-      `);
-      const nextNum = (Number(maxRow[0]?.maxNum) || 0) + 1;
-      const newId = `SCT${String(nextNum).padStart(3, "0")}`;
-      await db.query("UPDATE students SET student_id=? WHERE id=?", [newId, r.id]);
-      console.log(`Migrated student ID from ${r.student_id} to ${newId} (id: ${r.id})`);
+    let maxNum = 0;
+    for (const s of allStudents) {
+      const m = String(s.student_id || "").match(/^SCT(\d+)$/i);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (n > maxNum) maxNum = n;
+      }
+    }
+    for (const s of allStudents) {
+      const sid = String(s.student_id || "").trim();
+      if (!sid.toUpperCase().startsWith("SCT") || sid.includes("-")) {
+        maxNum++;
+        const newId = `SCT${String(maxNum).padStart(3, "0")}`;
+        await db.query("UPDATE students SET student_id=? WHERE id=?", [newId, s.id]);
+        console.log(`Migrated student ID from ${sid} to ${newId} (id: ${s.id})`);
+      }
     }
   } catch (migErr) {
-    console.warn("Student ID migration notice:", migErr.message);
+    console.warn("Student ID startup migration notice:", migErr.message);
   }
 
   console.log(
