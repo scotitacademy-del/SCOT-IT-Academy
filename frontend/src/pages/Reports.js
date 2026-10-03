@@ -656,6 +656,113 @@ export default function Reports() {
   };
 
   // ====================================================
+  // STUDENT STATUS DONUT
+  // ====================================================
+
+  const STUDENT_STATUS_COLORS = {
+    Active:   "#f59e0b",
+    Inactive: "#ef4444",
+    Closed:   "#10b981",
+    Placed:   "#2563eb",
+    Other:    "#a0aec0",
+  };
+
+  const studentStatusSegments = (() => {
+    const counts = {};
+    studentRows.forEach((s) => {
+      const st = String(
+        s.status || "Active"
+      ).trim();
+      const key = [
+        "Active",
+        "Inactive",
+        "Closed",
+        "Placed",
+      ].includes(st)
+        ? st
+        : "Other";
+      counts[key] =
+        (counts[key] || 0) + 1;
+    });
+    const total = studentRows.length || 1;
+    let offset = 0;
+    return Object.entries(counts).map(
+      ([label, count]) => {
+        const pct = (count / total) * 100;
+        const seg = {
+          label,
+          count,
+          pct,
+          offset,
+          color:
+            STUDENT_STATUS_COLORS[label] ||
+            "#a0aec0",
+        };
+        offset += pct;
+        return seg;
+      }
+    );
+  })();
+
+  // ====================================================
+  // ENQUIRY STATUS DONUT
+  // ====================================================
+
+  const ENQUIRY_STATUS_COLORS = {
+    Pending:   "#f97316",
+    Positive:  "#f59e0b",
+    Negative:  "#ef4444",
+    Hold:      "#2563eb",
+    Low:       "#92400e",
+    Completed: "#10b981",
+  };
+
+  const enquiryStatusSegments = (() => {
+    const counts = {};
+    uniqueEnquiries.forEach((row) => {
+      const st = String(
+        statusOf(row) || "Pending"
+      ).trim();
+      const knownKeys = [
+        "Pending",
+        "Positive",
+        "Negative",
+        "Hold",
+        "Low",
+        "Completed",
+      ];
+      const key =
+        knownKeys.find(
+          (k) =>
+            k.toLowerCase() ===
+            st.toLowerCase()
+        ) || "Pending";
+      counts[key] =
+        (counts[key] || 0) + 1;
+    });
+    const total =
+      uniqueEnquiries.length || 1;
+    let offset = 0;
+    return Object.entries(counts).map(
+      ([label, count]) => {
+        const pct = (count / total) * 100;
+        const seg = {
+          label,
+          count,
+          pct,
+          offset,
+          color:
+            ENQUIRY_STATUS_COLORS[
+              label
+            ] || "#a0aec0",
+        };
+        offset += pct;
+        return seg;
+      }
+    );
+  })();
+
+  // ====================================================
   // AVAILABLE YEARS
   // ====================================================
 
@@ -1548,6 +1655,253 @@ export default function Reports() {
                 </div>
               )
             )}
+
+          </div>
+        </Panel>
+
+      </div>
+
+      {/* ==================================================
+          DONUT CHARTS ROW
+      ================================================== */}
+
+      <div
+        className="dashboard-grid"
+        style={{ marginTop: "22px" }}
+      >
+
+        {/* STUDENT STATUS DONUT */}
+
+        <Panel
+          title="Student Status"
+          subtitle={`${studentRows.length} total students`}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "32px",
+              padding: "8px 4px",
+              flexWrap: "wrap",
+            }}
+          >
+
+            {/* SVG DONUT */}
+
+            <div style={{ position: "relative", flexShrink: 0 }}>
+              <svg
+                width="140"
+                height="140"
+                viewBox="0 0 42 42"
+                style={{ display: "block" }}
+              >
+                {studentStatusSegments.length === 0 ? (
+                  <circle
+                    cx="21" cy="21" r="15.915"
+                    fill="transparent"
+                    stroke="#e2e8f0"
+                    strokeWidth="6"
+                  />
+                ) : (
+                  studentStatusSegments.map((seg, i) => {
+                    const circumference = 100;
+                    const dash = (seg.pct / 100) * circumference;
+                    const gap = circumference - dash;
+                    const rotate = (seg.offset / 100) * 360 - 90;
+                    return (
+                      <circle
+                        key={i}
+                        cx="21" cy="21" r="15.915"
+                        fill="transparent"
+                        stroke={seg.color}
+                        strokeWidth="6"
+                        strokeDasharray={`${dash} ${gap}`}
+                        strokeDashoffset="0"
+                        style={{ transform: `rotate(${rotate}deg)`, transformOrigin: "21px 21px" }}
+                      />
+                    );
+                  })
+                )}
+                <text
+                  x="21" y="19"
+                  textAnchor="middle"
+                  fontSize="5.5"
+                  fontWeight="700"
+                  fill="#172033"
+                >
+                  {studentRows.length}
+                </text>
+                <text
+                  x="21" y="25"
+                  textAnchor="middle"
+                  fontSize="3.5"
+                  fill="#718096"
+                >
+                  students
+                </text>
+              </svg>
+            </div>
+
+            {/* LEGEND */}
+
+            <div style={{ flex: 1, minWidth: "120px" }}>
+              {studentStatusSegments.map((seg) => (
+                <div
+                  key={seg.label}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "5px 0",
+                    borderBottom: "1px solid #f0f4f8",
+                    gap: "8px",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span
+                      style={{
+                        display: "inline-block",
+                        width: "10px",
+                        height: "10px",
+                        borderRadius: "50%",
+                        background: seg.color,
+                        flexShrink: 0,
+                      }}
+                    />
+                    <span style={{ fontSize: "13px", color: "#4a5568" }}>
+                      {seg.label}
+                    </span>
+                  </div>
+                  <strong style={{ fontSize: "13px", color: "#172033" }}>
+                    {seg.count}
+                    <span style={{ fontWeight: 400, color: "#a0aec0", marginLeft: "4px", fontSize: "12px" }}>
+                      ({seg.pct.toFixed(0)}%)
+                    </span>
+                  </strong>
+                </div>
+              ))}
+              {studentStatusSegments.length === 0 && (
+                <p style={{ color: "#a0aec0", fontSize: "13px" }}>No students yet.</p>
+              )}
+            </div>
+
+          </div>
+        </Panel>
+
+        {/* ENQUIRY STATUS DONUT */}
+
+        <Panel
+          title="Enquiry Status"
+          subtitle={`${uniqueEnquiries.length} total enquiries`}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "32px",
+              padding: "8px 4px",
+              flexWrap: "wrap",
+            }}
+          >
+
+            {/* SVG DONUT */}
+
+            <div style={{ position: "relative", flexShrink: 0 }}>
+              <svg
+                width="140"
+                height="140"
+                viewBox="0 0 42 42"
+                style={{ display: "block" }}
+              >
+                {enquiryStatusSegments.length === 0 ? (
+                  <circle
+                    cx="21" cy="21" r="15.915"
+                    fill="transparent"
+                    stroke="#e2e8f0"
+                    strokeWidth="6"
+                  />
+                ) : (
+                  enquiryStatusSegments.map((seg, i) => {
+                    const circumference = 100;
+                    const dash = (seg.pct / 100) * circumference;
+                    const gap = circumference - dash;
+                    const rotate = (seg.offset / 100) * 360 - 90;
+                    return (
+                      <circle
+                        key={i}
+                        cx="21" cy="21" r="15.915"
+                        fill="transparent"
+                        stroke={seg.color}
+                        strokeWidth="6"
+                        strokeDasharray={`${dash} ${gap}`}
+                        strokeDashoffset="0"
+                        style={{ transform: `rotate(${rotate}deg)`, transformOrigin: "21px 21px" }}
+                      />
+                    );
+                  })
+                )}
+                <text
+                  x="21" y="19"
+                  textAnchor="middle"
+                  fontSize="5.5"
+                  fontWeight="700"
+                  fill="#172033"
+                >
+                  {uniqueEnquiries.length}
+                </text>
+                <text
+                  x="21" y="25"
+                  textAnchor="middle"
+                  fontSize="3.5"
+                  fill="#718096"
+                >
+                  enquiries
+                </text>
+              </svg>
+            </div>
+
+            {/* LEGEND */}
+
+            <div style={{ flex: 1, minWidth: "120px" }}>
+              {enquiryStatusSegments.map((seg) => (
+                <div
+                  key={seg.label}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "5px 0",
+                    borderBottom: "1px solid #f0f4f8",
+                    gap: "8px",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span
+                      style={{
+                        display: "inline-block",
+                        width: "10px",
+                        height: "10px",
+                        borderRadius: "50%",
+                        background: seg.color,
+                        flexShrink: 0,
+                      }}
+                    />
+                    <span style={{ fontSize: "13px", color: "#4a5568" }}>
+                      {seg.label}
+                    </span>
+                  </div>
+                  <strong style={{ fontSize: "13px", color: "#172033" }}>
+                    {seg.count}
+                    <span style={{ fontWeight: 400, color: "#a0aec0", marginLeft: "4px", fontSize: "12px" }}>
+                      ({seg.pct.toFixed(0)}%)
+                    </span>
+                  </strong>
+                </div>
+              ))}
+              {enquiryStatusSegments.length === 0 && (
+                <p style={{ color: "#a0aec0", fontSize: "13px" }}>No enquiries yet.</p>
+              )}
+            </div>
 
           </div>
         </Panel>
