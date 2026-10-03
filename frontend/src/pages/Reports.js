@@ -1356,16 +1356,16 @@ export default function Reports() {
       <div className="dashboard-grid">
 
         {/* ==================================================
-            MONTHLY ENQUIRIES
+            MONTHLY STUDENTS JOINED
         ================================================== */}
 
         <Panel
-          title="Monthly Enquiries"
+          title="Monthly Students Joined"
           subtitle={
             selectedYear >
             currentYear
               ? `No data yet — ${selectedYear} hasn't started`
-              : `${yearEnquiryTotal} completed enquiries in ${selectedYear}`
+              : `${joinedCount} students joined in ${selectedYear}`
           }
           action={
             yearSelect
@@ -1380,12 +1380,16 @@ export default function Reports() {
                   month,
                   index
                 ) => {
-                  // IMPORTANT:
-                  // This is COMPLETED count only
                   const total =
-                    monthlyCompleted[
+                    monthlyJoined[
                       index
                     ];
+
+                  const maxJoined =
+                    Math.max(
+                      1,
+                      ...monthlyJoined
+                    );
 
                   return (
                     <div
@@ -1413,14 +1417,16 @@ export default function Reports() {
                               5,
                               (
                                 total /
-                                maxMonthlyEnquiries
+                                maxJoined
                               ) *
                                 100
                             )}%`,
+                          background:
+                            "linear-gradient(180deg,#4f8ef7,#2563eb)",
                         }}
                       />
 
-                      {/* COMPLETED COUNT */}
+                      {/* COUNT */}
 
                       <b
                         style={{
@@ -1490,8 +1496,8 @@ export default function Reports() {
                     "#a0aec0",
                 }}
               >
-                Monthly completed
-                enquiry bars will
+                Monthly student
+                join bars will
                 appear automatically.
               </p>
             </div>
