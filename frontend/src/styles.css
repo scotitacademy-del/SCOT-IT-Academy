@@ -757,10 +757,6 @@ tbody tr:nth-child(even) td {
 tbody tr:nth-child(odd) td {
   background:#ffffff
 }
-tr:hover td {
-  background:#edf4ff!important;
-  transition:background 0.15s ease
-}
 .form-panel h4,.panel form h4 {
   margin:25px 0 15px;
   padding-bottom:8px;
@@ -1893,10 +1889,25 @@ button:focus-visible, a:focus-visible { outline: 3px solid #258ce0; outline-offs
   .student-detail-content, .modal { scrollbar-gutter: stable; }
 }
 
-.student-action-buttons { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
-.student-action-buttons .icon-btn { width: 40px; min-width: 40px; height: 40px; padding: 0; margin: 0; border-radius: 10px; }
-@media (max-width: 768px) {
-  .student-action-buttons .icon-btn { width: 44px; min-width: 44px; height: 44px; }
+.student-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: nowrap;
+}
+.student-action-buttons .icon-btn {
+  background: transparent !important;
+  border: none;
+  padding: 2px;
+  margin: 0;
+  width: auto;
+  min-width: auto;
+  height: auto;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: none;
 }
 
 /* ============================================================
@@ -1917,18 +1928,16 @@ button:focus-visible, a:focus-visible { outline: 3px solid #258ce0; outline-offs
   padding:12px 16px
 }
 
-/* Student ID pill badge */
+/* Student ID clean text (no background, no border) */
 .student-id-text {
-  display:inline-flex;
-  align-items:center;
-  background:#e8f0fd;
-  color:#1a4ab9;
-  font-size:12px;
+  display:inline-block;
+  background:transparent !important;
+  color:#102d47;
+  font-size:13.5px;
   font-weight:700;
-  letter-spacing:0.04em;
-  padding:4px 10px;
-  border-radius:20px;
-  border:1px solid #c3d4f8
+  letter-spacing:0.02em;
+  padding:0;
+  border:none;
 }
 
 /* Student name bold */
@@ -1955,80 +1964,62 @@ button:focus-visible, a:focus-visible { outline: 3px solid #258ce0; outline-offs
 }
 
 /* Action buttons in students table */
-.student-action-buttons {
-  display:flex;
-  align-items:center;
-  gap:6px;
-  flex-wrap:nowrap
-}
-.student-action-buttons .icon-btn {
-  width:34px;
-  min-width:34px;
-  height:34px;
-  padding:0;
-  margin:0;
-  border-radius:8px;
-  transition:background 0.15s ease, color 0.15s ease
-}
 .student-action-buttons .view-action {
-  background:#e8f4ff;
-  color:#1a6bb5
+  color:#1a6bb5;
+  background:transparent !important;
 }
 .student-action-buttons .view-action:hover {
-  background:#c7e4ff;
-  color:#0d4f8c
+  color:#0d4f8c;
+  opacity:0.8;
 }
 .student-action-buttons .edit-action {
-  background:#edf7ee;
-  color:#1a7a3a
+  color:#1a7a3a;
+  background:transparent !important;
 }
 .student-action-buttons .edit-action:hover {
-  background:#c6eccc;
-  color:#115a28
+  color:#115a28;
+  opacity:0.8;
 }
 .student-action-buttons .delete-btn {
-  background:#fff0f0;
-  color:#b91c1c
+  color:#b91c1c;
+  background:transparent !important;
 }
 .student-action-buttons .delete-btn:hover {
-  background:#fecaca;
-  color:#7f1d1d
+  color:#7f1d1d;
+  opacity:0.8;
 }
 
 /* ============================================================
-   ENQUIRY TABLE - MODERN REDESIGN
+   ENQUIRY TABLE - ACTION BUTTONS (NO BACKGROUND)
    ============================================================ */
 .action-buttons {
   display:flex;
   align-items:center;
-  gap:6px;
+  gap:12px;
   flex-wrap:nowrap
 }
 .action-buttons .icon-btn {
-  width:34px;
-  min-width:34px;
-  height:34px;
-  padding:0;
+  background:transparent !important;
+  border:none;
+  padding:2px;
   margin:0;
-  border-radius:8px;
-  font-size:16px;
+  width:auto;
+  min-width:auto;
+  height:auto;
+  font-size:17px;
+  cursor:pointer;
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  transition:background 0.15s ease, color 0.15s ease
+  box-shadow:none;
+  transition:color 0.15s ease, opacity 0.15s ease
 }
 /* View */
-.action-buttons .icon-btn:nth-child(1) { background:#e8f4ff; color:#1a6bb5 }
-.action-buttons .icon-btn:nth-child(1):hover { background:#c7e4ff; color:#0d4f8c }
+.action-buttons .icon-btn:nth-child(1) { color:#1a6bb5; background:transparent !important; }
+.action-buttons .icon-btn:nth-child(1):hover { color:#0d4f8c; opacity:0.8; }
 /* Edit */
-.action-buttons .icon-btn:nth-child(2) { background:#edf7ee; color:#1a7a3a }
-.action-buttons .icon-btn:nth-child(2):hover { background:#c6eccc; color:#115a28 }
+.action-buttons .icon-btn:nth-child(2) { color:#1a7a3a; background:transparent !important; }
+.action-buttons .icon-btn:nth-child(2):hover { color:#115a28; opacity:0.8; }
 /* Delete */
-.action-buttons .icon-btn.delete-btn { background:#fff0f0; color:#b91c1c }
-.action-buttons .icon-btn.delete-btn:hover { background:#fecaca; color:#7f1d1d }
-
-/* Responsive action buttons */
-@media (max-width: 768px) {
-  .student-action-buttons .icon-btn,
-  .action-buttons .icon-btn { width:40px; min-width:40px; height:40px }
-}
+.action-buttons .icon-btn.delete-btn { color:#b91c1c; background:transparent !important; }
+.action-buttons .icon-btn.delete-btn:hover { color:#7f1d1d; opacity:0.8; }
