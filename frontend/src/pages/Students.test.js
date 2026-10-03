@@ -30,7 +30,7 @@ async function change(selector, value) {
   });
 }
 async function click(text) {
-  await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent.trim() === text).click());
+  await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent.trim() === text || b.title === text).click());
 }
 beforeEach(async () => {
   jest.clearAllMocks();

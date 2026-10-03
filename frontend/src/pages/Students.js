@@ -1438,7 +1438,7 @@ export default function Students() {
             <input
               type="text"
               aria-label="Search students"
-              placeholder="Search ID (SCOT-001), name, course, mobile..."
+              placeholder="Search ID (SCT001), name, course..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{
@@ -1647,17 +1647,7 @@ export default function Students() {
                     >
                       {/* 1. STUDENT ID (Matches screenshot: bold, dark, sequential SCOT-001, SCOT-002...) */}
                       <td className="student-id-cell">
-                        <span
-                          style={{
-                            fontWeight: 700,
-                            fontSize: "14px",
-                            letterSpacing: "0.5px",
-                            color: "#0a2540",
-                            fontFamily:
-                              'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-                            display: "inline-block",
-                          }}
-                        >
+                        <span className="student-id-text">
                           {student.displayStudentId}
                         </span>
                       </td>
@@ -1706,7 +1696,7 @@ export default function Students() {
                             display: "inline-block",
                             padding: "6px 12px",
                             borderRadius: "999px",
-                            fontSize: "12px",
+                            fontSize: "14px",
                             fontWeight: 700,
                             minWidth: "75px",
                             textAlign: "center",
@@ -1728,7 +1718,10 @@ export default function Students() {
                             title="View" aria-label={`View ${student.name}`}
                             onClick={() => openView(student)}
                           >
-                            View
+                            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                              <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" />
+                              <circle cx="12" cy="12" r="3" />
+                            </svg>
                           </button>
 
                           <button
@@ -1737,7 +1730,9 @@ export default function Students() {
                             title="Edit" aria-label={`Edit ${student.name}`}
                             onClick={() => openEdit(student)}
                           >
-                            Edit
+                            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                              <path d="m16 4 4 4M4 20l4-.8L19 8a2.1 2.1 0 0 0-3-3L5 16l-1 4Z" />
+                            </svg>
                           </button>
 
                           <button
@@ -1746,7 +1741,10 @@ export default function Students() {
                             title="Delete" aria-label={`Delete ${student.name}`}
                             onClick={() => remove(student)}
                           >
-                            Delete
+                            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                              <path d="M3 6h18M8 6V4h8v2m3 0-1 14H6L5 6" />
+                              <path d="M10 11v5m4-5v5" />
+                            </svg>
                           </button>
                         </div>
                       </td>
@@ -1883,7 +1881,7 @@ export default function Students() {
                 >
                   {editingStudent
                     ? "Student ID is unique and cannot be modified."
-                    : "Auto-generated sequence starting with SCOT-001."}
+                    : "Auto-generated continuous sequence (e.g. SCT001, SCT002...)."}
                 </small>
               </div>
 

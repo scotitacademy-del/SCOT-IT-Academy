@@ -3539,6 +3539,30 @@ async function initializeSchema() {
     DEFAULT CHARSET=utf8mb4
   `);
 
+  // ==========================================================
+  // NORMALIZE EXISTING STUDENT IDs TO CONTINUOUS SCTxxx FORMAT
+  // ==========================================================
+  try {
+    const [scotRows] = await db.query(
+      "SELECT id, student_id FROM students WHERE student_id LIKE 'SCOT-%' OR student_id LIKE 'SCOT%' ORDER BY id ASC"
+    );
+    for (const r of scotRows) {
+      const [maxRow] = await db.query(`
+        SELECT COALESCE(MAX(
+          CAST(REGEXP_REPLACE(student_id, '[^0-9]', '') AS UNSIGNED)
+        ), 0) AS maxNum
+        FROM students
+        WHERE student_id REGEXP '^SCT[0-9]+$'
+      `);
+      const nextNum = (Number(maxRow[0]?.maxNum) || 0) + 1;
+      const newId = `SCT${String(nextNum).padStart(3, "0")}`;
+      await db.query("UPDATE students SET student_id=? WHERE id=?", [newId, r.id]);
+      console.log(`Migrated student ID from ${r.student_id} to ${newId} (id: ${r.id})`);
+    }
+  } catch (migErr) {
+    console.warn("Student ID migration notice:", migErr.message);
+  }
+
   console.log(
     "All database tables checked successfully."
   );
