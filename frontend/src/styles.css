@@ -156,9 +156,11 @@
   box-sizing:border-box
 }
 body {
-  font-family:Arial,Helvetica,sans-serif;
+  font-family:'Inter',Arial,Helvetica,sans-serif;
   background:#f4f7fb;
-  color:#172033
+  color:#172033;
+  font-size:14px;
+  -webkit-font-smoothing:antialiased
 }
 .hidden {
   display:none!important
@@ -717,24 +719,47 @@ body {
 table {
   width:100%;
   border-collapse:collapse;
-  min-width:900px
+  min-width:900px;
+  font-family:'Inter',Arial,Helvetica,sans-serif;
+  font-size:13.5px
+}
+thead {
+  position:sticky;
+  top:0;
+  z-index:1
 }
 th {
-  background:#f7f9fc;
+  background:linear-gradient(180deg,#f0f4fa 0%,#e8eef8 100%);
   text-align:left;
-  padding:13px;
-  font-size:12px;
-  color:#5f6c7b;
-  white-space:nowrap
+  padding:13px 15px;
+  font-size:11.5px;
+  font-weight:700;
+  color:#3a4d6b;
+  white-space:nowrap;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  border-bottom:2px solid #c8d6ea
 }
+th:first-child { border-radius:8px 0 0 0 }
+th:last-child  { border-radius:0 8px 0 0 }
 td {
-  padding:14px 13px;
-  border-bottom:1px solid #edf2f7;
-  font-size:13px;
-  white-space:nowrap
+  padding:13px 15px;
+  border-bottom:1px solid #edf2f8;
+  font-size:13.5px;
+  color:#1e2d42;
+  white-space:nowrap;
+  vertical-align:middle;
+  font-weight:400
 }
-tr:hover {
-  background:#fafcff
+tbody tr:nth-child(even) td {
+  background:#f8fafd
+}
+tbody tr:nth-child(odd) td {
+  background:#ffffff
+}
+tr:hover td {
+  background:#edf4ff!important;
+  transition:background 0.15s ease
 }
 .form-panel h4,.panel form h4 {
   margin:25px 0 15px;
@@ -1868,4 +1893,142 @@ button:focus-visible, a:focus-visible { outline: 3px solid #258ce0; outline-offs
   .student-detail-content, .modal { scrollbar-gutter: stable; }
 }
 
-.student-action-buttons .icon-btn { width: auto; min-width: 64px; padding: 8px 10px; font-size: 13px; }
+.student-action-buttons { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+.student-action-buttons .icon-btn { width: 40px; min-width: 40px; height: 40px; padding: 0; margin: 0; border-radius: 10px; }
+@media (max-width: 768px) {
+  .student-action-buttons .icon-btn { width: 44px; min-width: 44px; height: 44px; }
+}
+
+/* ============================================================
+   STUDENTS TABLE - MODERN REDESIGN
+   ============================================================ */
+.students-table th {
+  font-size:11px;
+  font-weight:700;
+  color:#4a607a;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  padding:12px 16px
+}
+.students-table td {
+  font-size:13.5px;
+  font-weight:400;
+  color:#1e2d42;
+  padding:12px 16px
+}
+
+/* Student ID pill badge */
+.student-id-text {
+  display:inline-flex;
+  align-items:center;
+  background:#e8f0fd;
+  color:#1a4ab9;
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:0.04em;
+  padding:4px 10px;
+  border-radius:20px;
+  border:1px solid #c3d4f8
+}
+
+/* Student name bold */
+.students-table .student-name-cell strong {
+  font-size:13.5px;
+  font-weight:700;
+  color:#102d47;
+  letter-spacing:0
+}
+
+/* Fee cells – right aligned, monospace digits */
+.students-table .total-fee-cell,
+.students-table .fee-cell {
+  font-variant-numeric:tabular-nums;
+  font-weight:600;
+  color:#1e3a5f
+}
+
+/* Date cells */
+.students-table .date-cell {
+  font-size:13px;
+  color:#4a607a;
+  font-variant-numeric:tabular-nums
+}
+
+/* Action buttons in students table */
+.student-action-buttons {
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-wrap:nowrap
+}
+.student-action-buttons .icon-btn {
+  width:34px;
+  min-width:34px;
+  height:34px;
+  padding:0;
+  margin:0;
+  border-radius:8px;
+  transition:background 0.15s ease, color 0.15s ease
+}
+.student-action-buttons .view-action {
+  background:#e8f4ff;
+  color:#1a6bb5
+}
+.student-action-buttons .view-action:hover {
+  background:#c7e4ff;
+  color:#0d4f8c
+}
+.student-action-buttons .edit-action {
+  background:#edf7ee;
+  color:#1a7a3a
+}
+.student-action-buttons .edit-action:hover {
+  background:#c6eccc;
+  color:#115a28
+}
+.student-action-buttons .delete-btn {
+  background:#fff0f0;
+  color:#b91c1c
+}
+.student-action-buttons .delete-btn:hover {
+  background:#fecaca;
+  color:#7f1d1d
+}
+
+/* ============================================================
+   ENQUIRY TABLE - MODERN REDESIGN
+   ============================================================ */
+.action-buttons {
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-wrap:nowrap
+}
+.action-buttons .icon-btn {
+  width:34px;
+  min-width:34px;
+  height:34px;
+  padding:0;
+  margin:0;
+  border-radius:8px;
+  font-size:16px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  transition:background 0.15s ease, color 0.15s ease
+}
+/* View */
+.action-buttons .icon-btn:nth-child(1) { background:#e8f4ff; color:#1a6bb5 }
+.action-buttons .icon-btn:nth-child(1):hover { background:#c7e4ff; color:#0d4f8c }
+/* Edit */
+.action-buttons .icon-btn:nth-child(2) { background:#edf7ee; color:#1a7a3a }
+.action-buttons .icon-btn:nth-child(2):hover { background:#c6eccc; color:#115a28 }
+/* Delete */
+.action-buttons .icon-btn.delete-btn { background:#fff0f0; color:#b91c1c }
+.action-buttons .icon-btn.delete-btn:hover { background:#fecaca; color:#7f1d1d }
+
+/* Responsive action buttons */
+@media (max-width: 768px) {
+  .student-action-buttons .icon-btn,
+  .action-buttons .icon-btn { width:40px; min-width:40px; height:40px }
+}
