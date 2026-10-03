@@ -3544,7 +3544,9 @@ async function initializeSchema() {
 // ============================================================
 
 async function ensureDefaultOwner() {
-  await ensureOwner(db, process.env);
+  // reset:true ensures OWNER_USERNAME/OWNER_PASSWORD env vars are always applied
+  // on every startup, so credential changes in Render take effect without a shell.
+  await ensureOwner(db, process.env, { reset: true });
 }
 
 // ============================================================
