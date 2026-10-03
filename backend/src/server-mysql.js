@@ -842,13 +842,6 @@ app.post(
         });
       }
 
-      if (!mobile) {
-        return res.status(400).json({
-          message:
-            "Mobile number is required.",
-        });
-      }
-
       const [result] =
         await db.execute(
           `
@@ -1041,8 +1034,8 @@ app.patch(
             current.status
         ) || "Joined";
 
-      if (!studentId || !name || !mobile) {
-        return res.status(400).json({ message: "Student ID, name and mobile are required." });
+      if (!studentId || !name) {
+        return res.status(400).json({ message: "Student ID and name are required." });
       }
 
       await db.execute(

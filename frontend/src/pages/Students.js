@@ -1029,29 +1029,22 @@ export default function Students() {
       return;
     }
 
-    const selectedCategory = String(form.category || "").trim();
-
-    if (!selectedCategory) {
-      setMessage("Please select a category.");
-      setSaving(false);
-      return;
-    }
-
+    const selectedCategory = String(form.category || editingStudent?.category || "General").trim();
     const selectedStatus = normalizeStatus(form.status);
 
     const studentData = {
       name: form.name,
       course: form.course,
-      mobile: form.mobile,
-      email: form.email,
-      city: form.city,
+      mobile: form.mobile || editingStudent?.mobile || "",
+      email: form.email || editingStudent?.email || "",
+      city: form.city || editingStudent?.city || "",
       category: selectedCategory,
       totalFee: editedTotalFee,
       paidFee: editedPaidFee,
       balanceFee: editedBalanceFee,
       dueDate: editedDueDate,
       joinDate: editedJoinDate,
-      nextFollowUpDate: editedNextFollowUpDate,
+      nextFollowUpDate: editedNextFollowUpDate || editingStudent?.nextFollowUpDate || "",
       status: selectedStatus,
     };
 
@@ -1922,35 +1915,6 @@ export default function Students() {
                 />
               </div>
 
-              {/* MOBILE */}
-              <div className="form-group">
-                <label htmlFor="student-mobile">
-                  Mobile Number
-                </label>
-
-                <input
-                  name="mobile" id="student-mobile"
-                  value={form.mobile ?? ""}
-                  onChange={change}
-                  type="tel"
-                  placeholder="10-digit mobile"
-                />
-              </div>
-
-              {/* EMAIL */}
-              <div className="form-group">
-                <label htmlFor="student-email">
-                  Email
-                </label>
-
-                <input
-                  name="email" id="student-email"
-                  value={form.email ?? ""}
-                  onChange={change}
-                  type="email"
-                  placeholder="student@example.com"
-                />
-              </div>
 
               {/* CITY */}
               <div className="form-group">
@@ -2035,32 +1999,6 @@ export default function Students() {
                 </small>
               </div>
 
-              {/* CATEGORY */}
-              <div className="form-group">
-                <label htmlFor="student-category">
-                  Category *
-                </label>
-
-                <select
-                  name="category" id="student-category"
-                  value={form.category || ""}
-                  onChange={change}
-                  required
-                >
-                  <option value="">
-                    {categoryLoading
-                      ? "Loading Categories..."
-                      : "Select Category"}
-                  </option>
-
-                  {categories.map((category) => (
-                    <option key={category} value={category}>
-                      {category}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
               {/* JOIN DATE */}
               <div className="form-group">
                 <label htmlFor="student-joinDate">
@@ -2086,20 +2024,6 @@ export default function Students() {
                   type="date"
                   name="dueDate" id="student-dueDate"
                   value={form.dueDate || ""}
-                  onChange={change}
-                />
-              </div>
-
-              {/* NEXT FOLLOW-UP DATE */}
-              <div className="form-group">
-                <label htmlFor="student-nextFollowUpDate">
-                  Next Follow-up Date
-                </label>
-
-                <input
-                  type="date"
-                  name="nextFollowUpDate" id="student-nextFollowUpDate"
-                  value={form.nextFollowUpDate || ""}
                   onChange={change}
                 />
               </div>
