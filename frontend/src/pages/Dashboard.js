@@ -1058,19 +1058,15 @@ export default function Dashboard() {
               }
             );
 
-          if (!matchedEnquiry) {
-            return;
-          }
-
           const enquiryPaid =
-            getPaidFee(
-              matchedEnquiry
-            );
+            matchedEnquiry
+              ? getPaidFee(matchedEnquiry)
+              : 0;
 
           const enquiryPaymentDate =
-            getPaymentDate(
-              matchedEnquiry
-            );
+            matchedEnquiry
+              ? getPaymentDate(matchedEnquiry)
+              : null;
 
           const currentStudentPaidFee =
             getPaidFee(
@@ -1090,72 +1086,73 @@ export default function Dashboard() {
             );
 
           const completedStudent = {
-
             ...student,
 
             status:
-              "Completed",
+              student.status || "Active",
 
             name:
               student.name ||
-              getName(
-                matchedEnquiry
-              ),
+              (matchedEnquiry
+                ? getName(matchedEnquiry)
+                : ""),
 
             mobile:
               student.mobile ||
-              getMobile(
-                matchedEnquiry
-              ),
+              (matchedEnquiry
+                ? getMobile(matchedEnquiry)
+                : ""),
 
             city:
               student.city ||
-              matchedEnquiry.city ||
+              (matchedEnquiry
+                ? matchedEnquiry.city
+                : "") ||
               "",
 
             category:
               student.category ||
-              getCategory(
-                matchedEnquiry
-              ),
+              (matchedEnquiry
+                ? getCategory(matchedEnquiry)
+                : ""),
 
             course:
               student.course ||
-              getCourse(
-                matchedEnquiry
-              ),
+              (matchedEnquiry
+                ? getCourse(matchedEnquiry)
+                : ""),
 
             paidFee:
-              currentStudentPaidFee,
+              currentStudentPaidFee > 0
+                ? currentStudentPaidFee
+                : enquiryPaid,
 
             balanceFee:
               currentStudentBalanceFee,
 
             totalFee:
-              currentStudentTotalFee >
-              0
+              currentStudentTotalFee > 0
                 ? currentStudentTotalFee
-                : getTotalFee(
-                    matchedEnquiry,
-                    enquiryPaid,
-                    0
-                  ),
+                : (matchedEnquiry
+                    ? getTotalFee(matchedEnquiry, enquiryPaid, 0)
+                    : 0),
 
             joinDate:
               student.joinDate ||
-              getJoinDate(
-                matchedEnquiry
-              ),
+              (matchedEnquiry
+                ? getJoinDate(matchedEnquiry)
+                : ""),
 
             paymentDate:
               student.paymentDate ||
-              enquiryPaymentDate,
+              enquiryPaymentDate ||
+              student.joinDate,
 
             dueDate:
               student.dueDate ||
-              getDueDate(
-                matchedEnquiry
-              ),
+              (matchedEnquiry
+                ? getDueDate(matchedEnquiry)
+                : ""),
           };
 
           const key =
@@ -1458,7 +1455,7 @@ export default function Dashboard() {
           );
 
         if (!dateValue) {
-          return false;
+          return true;
         }
 
         return (

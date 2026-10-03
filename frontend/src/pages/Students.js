@@ -752,9 +752,9 @@ export default function Students() {
     return sorted.map((student, index) => {
       let displayStudentId = String(student.studentId || student.student_id || student.id || "").trim();
 
-      // If it has old SCOT- format or lacks SCT prefix, format as continuous SCT sequential ID
-      if (!displayStudentId || displayStudentId.toUpperCase().startsWith("SCOT") || displayStudentId.includes("-")) {
-        displayStudentId = `SCT${String(index + 1).padStart(3, "0")}`;
+      // Ensure consistent SCOT-xxx sequential format (e.g. SCOT-001, SCOT-002, SCOT-005)
+      if (!displayStudentId || !displayStudentId.startsWith("SCOT-")) {
+        displayStudentId = `SCOT-${String(index + 1).padStart(3, "0")}`;
       }
 
       return {
@@ -1436,7 +1436,7 @@ export default function Students() {
             <input
               type="text"
               aria-label="Search students"
-              placeholder="Search ID (SCT001), name, course..."
+              placeholder="Search ID (SCOT-001), name, course..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{
@@ -1879,7 +1879,7 @@ export default function Students() {
                 >
                   {editingStudent
                     ? "Student ID is unique and cannot be modified."
-                    : "Auto-generated continuous sequence (e.g. SCT001, SCT002...)."}
+                    : "Auto-generated continuous sequence (e.g. SCOT-001, SCOT-002...)."}
                 </small>
               </div>
 

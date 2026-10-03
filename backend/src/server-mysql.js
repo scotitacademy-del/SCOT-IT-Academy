@@ -683,26 +683,27 @@ app.get(
   auth,
   async (req, res, next) => {
     try {
-      // Fix any non-standard student_id (like SCOT-001) in DB on the fly
+      // Fix any non-standard student_id (ensuring SCOT-001, SCOT-002, etc.) in DB on the fly
       try {
         const [allStudents] = await db.query(
           "SELECT id, student_id FROM students ORDER BY id ASC"
         );
-        let maxNum = 0;
-        for (const s of allStudents) {
-          const m = String(s.student_id || "").match(/^SCT(\d+)$/i);
-          if (m) {
-            const n = parseInt(m[1], 10);
-            if (n > maxNum) maxNum = n;
+        const needsMigration = allStudents.some(
+          (s, index) => s.student_id !== `SCOT-${String(index + 1).padStart(3, "0")}`
+        );
+        if (needsMigration && allStudents.length > 0) {
+          for (const s of allStudents) {
+            await db.query("UPDATE students SET student_id=? WHERE id=?", [
+              `TMP_${s.id}`,
+              s.id,
+            ]);
           }
-        }
-        for (const s of allStudents) {
-          const sid = String(s.student_id || "").trim();
-          if (!sid.toUpperCase().startsWith("SCT") || sid.includes("-")) {
-            maxNum++;
-            const newId = `SCT${String(maxNum).padStart(3, "0")}`;
-            await db.query("UPDATE students SET student_id=? WHERE id=?", [newId, s.id]);
-            s.student_id = newId;
+          for (let i = 0; i < allStudents.length; i++) {
+            const finalId = `SCOT-${String(i + 1).padStart(3, "0")}`;
+            await db.query("UPDATE students SET student_id=? WHERE id=?", [
+              finalId,
+              allStudents[i].id,
+            ]);
           }
         }
       } catch (normErr) {
@@ -794,7 +795,7 @@ app.post(
             if (val > maxNum) maxNum = val;
           }
         }
-        studentId = `SCT${String(maxNum + 1).padStart(3, "0")}`;
+        studentId = `SCOT-${String(maxNum + 1).padStart(3, "0")}`;
       }
 
       const dueDate =
@@ -3561,27 +3562,29 @@ async function initializeSchema() {
   `);
 
   // ==========================================================
-  // NORMALIZE EXISTING STUDENT IDs TO CONTINUOUS SCTxxx FORMAT
+  // NORMALIZE EXISTING STUDENT IDs TO CONTINUOUS SCOT-xxx FORMAT
   // ==========================================================
   try {
     const [allStudents] = await db.query(
       "SELECT id, student_id FROM students ORDER BY id ASC"
     );
-    let maxNum = 0;
-    for (const s of allStudents) {
-      const m = String(s.student_id || "").match(/^SCT(\d+)$/i);
-      if (m) {
-        const n = parseInt(m[1], 10);
-        if (n > maxNum) maxNum = n;
+    const needsMigration = allStudents.some(
+      (s, index) => s.student_id !== `SCOT-${String(index + 1).padStart(3, "0")}`
+    );
+    if (needsMigration && allStudents.length > 0) {
+      for (const s of allStudents) {
+        await db.query("UPDATE students SET student_id=? WHERE id=?", [
+          `TMP_${s.id}`,
+          s.id,
+        ]);
       }
-    }
-    for (const s of allStudents) {
-      const sid = String(s.student_id || "").trim();
-      if (!sid.toUpperCase().startsWith("SCT") || sid.includes("-")) {
-        maxNum++;
-        const newId = `SCT${String(maxNum).padStart(3, "0")}`;
-        await db.query("UPDATE students SET student_id=? WHERE id=?", [newId, s.id]);
-        console.log(`Migrated student ID from ${sid} to ${newId} (id: ${s.id})`);
+      for (let i = 0; i < allStudents.length; i++) {
+        const finalId = `SCOT-${String(i + 1).padStart(3, "0")}`;
+        await db.query("UPDATE students SET student_id=? WHERE id=?", [
+          finalId,
+          allStudents[i].id,
+        ]);
+        console.log(`Normalized student ID for id ${allStudents[i].id} to ${finalId}`);
       }
     }
   } catch (migErr) {
