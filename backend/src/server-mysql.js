@@ -757,11 +757,16 @@ app.post(
 
       let studentId = text(b.studentId ?? b.student_id);
       if (!studentId) {
+        // Extract the numeric portion from ANY existing student_id format
+        // (e.g. SCT001, SCOT-001, SCT-005) so IDs are always globally sequential.
         const row = await first(`
-          SELECT COALESCE(MAX(CAST(SUBSTRING(student_id, 6) AS UNSIGNED)), 0) AS lastNumber
-          FROM students WHERE student_id REGEXP '^SCOT-[0-9]+$'
+          SELECT COALESCE(MAX(
+            CAST(REGEXP_REPLACE(student_id, '[^0-9]', '') AS UNSIGNED)
+          ), 0) AS lastNumber
+          FROM students
+          WHERE student_id REGEXP '[0-9]+'
         `);
-        studentId = `SCOT-${String(Number(row.lastNumber) + 1).padStart(3, "0")}`;
+        studentId = `SCT${String(Number(row.lastNumber) + 1).padStart(3, "0")}`;
       }
 
       const dueDate =
