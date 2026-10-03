@@ -1774,9 +1774,6 @@ export default function Reports() {
                   </div>
                   <strong style={{ fontSize: "13px", color: "#172033" }}>
                     {seg.count}
-                    <span style={{ fontWeight: 400, color: "#a0aec0", marginLeft: "4px", fontSize: "12px" }}>
-                      ({seg.pct.toFixed(0)}%)
-                    </span>
                   </strong>
                 </div>
               ))}
@@ -1892,9 +1889,6 @@ export default function Reports() {
                   </div>
                   <strong style={{ fontSize: "13px", color: "#172033" }}>
                     {seg.count}
-                    <span style={{ fontWeight: 400, color: "#a0aec0", marginLeft: "4px", fontSize: "12px" }}>
-                      ({seg.pct.toFixed(0)}%)
-                    </span>
                   </strong>
                 </div>
               ))}
