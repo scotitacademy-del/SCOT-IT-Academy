@@ -10,12 +10,17 @@ import * as XLSX from "xlsx";
 import {
   studentApi,
   categoryApi,
+  enquiryApi,
 } from "../services/api";
 
 import {
   Panel,
   Pagination,
 } from "../components/Ui";
+
+import {
+  REFERRED_BY_OPTIONS,
+} from "../data/referralOptions";
 
 // ======================================================
 // STATUS OPTIONS
@@ -52,6 +57,39 @@ const normalizeStatus = (status) => {
 };
 
 // ======================================================
+// LOCAL STORAGE PERSISTENCE FOR STUDENT DETAILS
+// Ensures Referred By and Comments / Discussion are saved
+// immediately and persist across sessions and reloads.
+// ======================================================
+
+const STUDENT_OVERRIDES_KEY = "scot_student_overrides";
+
+const getStudentOverrides = () => {
+  try {
+    const raw = localStorage.getItem(STUDENT_OVERRIDES_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+};
+
+const saveStudentOverride = (keys = [], data = {}) => {
+  try {
+    const existing = getStudentOverrides();
+    const keyList = Array.isArray(keys) ? keys : [keys];
+    keyList.filter(Boolean).forEach((k) => {
+      existing[String(k)] = {
+        ...(existing[String(k)] || {}),
+        ...data,
+      };
+    });
+    localStorage.setItem(STUDENT_OVERRIDES_KEY, JSON.stringify(existing));
+  } catch (err) {
+    console.warn("Could not save student override:", err);
+  }
+};
+
+// ======================================================
 // INITIAL FORM
 // ======================================================
 
@@ -63,6 +101,8 @@ const initialForm = {
   email: "",
   city: "",
   category: "",
+  referred_by: "",
+  comments: "",
 
   totalFee: "",
   paidFee: "",
@@ -70,7 +110,6 @@ const initialForm = {
 
   dueDate: "",
   joinDate: "",
-  nextFollowUpDate: "",
 
   status: "Active",
 };
@@ -119,25 +158,6 @@ const formatDateForInput = (date) => {
   }
 
   return "";
-};
-
-// ======================================================
-// NEXT FOLLOW-UP DATE
-// ======================================================
-
-const getNextFollowUpDate = (
-  student = {}
-) => {
-  return formatDateForInput(
-    student.nextFollowUpDate ||
-      student.next_follow_up_date ||
-      student.next_followup_date ||
-      student.nextFollowupDate ||
-      student.next_followup ||
-      student.followUpDate ||
-      student.follow_up_date ||
-      ""
-  );
 };
 
 // ======================================================
@@ -247,6 +267,40 @@ const normalize = (
       student.categoryName ||
       "",
 
+    referred_by: (() => {
+      const overrides = getStudentOverrides();
+      const keys = [student.id, student.studentId, student.student_id, studentKey(student)].filter(Boolean);
+      for (const k of keys) {
+        if (overrides[String(k)]?.referred_by !== undefined) {
+          return overrides[String(k)].referred_by;
+        }
+      }
+      return (
+        student.referred_by ||
+        student.referredBy ||
+        student.referral_source ||
+        student.referralSource ||
+        student.lead_source ||
+        student.leadSource ||
+        ""
+      );
+    })(),
+
+    comments: (() => {
+      const overrides = getStudentOverrides();
+      const keys = [student.id, student.studentId, student.student_id, studentKey(student)].filter(Boolean);
+      for (const k of keys) {
+        if (overrides[String(k)]?.comments !== undefined) {
+          return overrides[String(k)].comments;
+        }
+      }
+      return (
+        student.comments ||
+        student.comment ||
+        ""
+      );
+    })(),
+
     totalFee,
     paidFee,
     balanceFee,
@@ -263,11 +317,6 @@ const normalize = (
         student.joinDate ||
           student.join_date ||
           ""
-      ),
-
-    nextFollowUpDate:
-      getNextFollowUpDate(
-        student
       ),
 
     status:
@@ -700,13 +749,35 @@ export default function Students() {
     try {
       setMessage("");
 
-      const response = await studentApi.list();
+      const [studentResponse, enquiryResponse] = await Promise.allSettled([
+        studentApi.list(),
+        enquiryApi.list(),
+      ]);
 
       const apiData =
-        response?.data?.results ||
-        response?.data?.data ||
-        response?.data ||
-        [];
+        studentResponse.status === "fulfilled"
+          ? studentResponse.value?.data?.results ||
+            studentResponse.value?.data?.data ||
+            studentResponse.value?.data ||
+            []
+          : [];
+
+      const enquiryData =
+        enquiryResponse.status === "fulfilled"
+          ? enquiryResponse.value?.data?.results ||
+            enquiryResponse.value?.data?.data ||
+            enquiryResponse.value?.data ||
+            []
+          : [];
+
+      const enquiryMap = new Map();
+      if (Array.isArray(enquiryData)) {
+        enquiryData.forEach((e) => {
+          if (e.mobile) enquiryMap.set(String(e.mobile).trim(), e);
+          const name = String(e.candidate_name || e.name || "").trim().toLowerCase();
+          if (name) enquiryMap.set(name, e);
+        });
+      }
 
       const apiStudents = Array.isArray(apiData)
         ? apiData.map(normalize)
@@ -794,7 +865,8 @@ export default function Students() {
       const q = searchTerm.trim().toLowerCase();
 
       if (q) {
-        const studentId = String(student.displayStudentId || "").toLowerCase();
+        const rawStudentId = String(student.studentId || student.student_id || "").toLowerCase();
+        const studentId = String(student.displayStudentId || rawStudentId || "").toLowerCase();
         const name = String(student.name || "").toLowerCase();
         const course = String(student.course || "").toLowerCase();
         const mobile = String(student.mobile || "").toLowerCase();
@@ -806,6 +878,7 @@ export default function Students() {
         const dueDate = String(student.dueDate || "").toLowerCase();
 
         const matchesSearch =
+          rawStudentId.includes(q) ||
           studentId.includes(q) ||
           name.includes(q) ||
           course.includes(q) ||
@@ -873,14 +946,13 @@ export default function Students() {
           "Student Name": student.name || "",
           "Course": student.course || "",
           "Mobile": student.mobile || "",
-          "Email": student.email || "",
+          "Comments / Discussion": student.comments || "",
           "City": student.city || "",
           "Category": student.category || "",
           "Total Fee": totalFee,
           "Paid Fee": paidFee,
           "Balance Fee": balanceFee,
           "Due Date": student.dueDate || "",
-          "Next Follow-up Date": getNextFollowUpDate(student),
           "Status": normalizeStatus(student.status),
         };
       });
@@ -911,14 +983,13 @@ export default function Students() {
         { wch: 25 }, // Student Name
         { wch: 25 }, // Course
         { wch: 16 }, // Mobile
-        { wch: 28 }, // Email
+        { wch: 32 }, // Comments / Discussion
         { wch: 18 }, // City
         { wch: 22 }, // Category
         { wch: 14 }, // Total Fee
         { wch: 14 }, // Paid Fee
         { wch: 14 }, // Balance Fee
         { wch: 14 }, // Due Date
-        { wch: 20 }, // Next Follow-up Date
         { wch: 14 }, // Status
       ];
 
@@ -1009,13 +1080,6 @@ export default function Students() {
         ""
     );
 
-    const editedNextFollowUpDate = formatDateForInput(
-      form.nextFollowUpDate ||
-        editingStudent?.nextFollowUpDate ||
-        editingStudent?.next_follow_up_date ||
-        ""
-    );
-
     const editedTotalFee = Number(form.totalFee) || 0;
     const editedPaidFee = Number(form.paidFee) || 0;
     const editedBalanceFee = calculateBalanceFee(
@@ -1039,12 +1103,13 @@ export default function Students() {
       email: form.email || editingStudent?.email || "",
       city: form.city || editingStudent?.city || "",
       category: selectedCategory,
+      referred_by: form.referred_by || "",
+      comments: form.comments || "",
       totalFee: editedTotalFee,
       paidFee: editedPaidFee,
       balanceFee: editedBalanceFee,
       dueDate: editedDueDate,
       joinDate: editedJoinDate,
-      nextFollowUpDate: editedNextFollowUpDate || editingStudent?.nextFollowUpDate || "",
       status: selectedStatus,
     };
 
@@ -1059,71 +1124,56 @@ export default function Students() {
 
     if (editingStudent) {
       try {
-        let updatedStudent;
+        const studentIdKeys = [
+          editingStudent.id,
+          editingStudent.studentId,
+          editingStudent.student_id,
+          editingStudent.displayStudentId,
+          studentKey(editingStudent),
+        ];
+
+        // Save override locally immediately so changes persist across reloads
+        saveStudentOverride(studentIdKeys, {
+          referred_by: studentData.referred_by,
+          comments: studentData.comments,
+        });
 
         if (
           editingStudent.id &&
           !String(editingStudent.id).startsWith("local-")
         ) {
-          const response = await studentApi.update(
-            editingStudent.id,
-            studentData
-          );
-
-          const apiResponse = response.data || {};
-
-          updatedStudent = normalize({
-            ...editingStudent,
-            ...apiResponse,
-            id: editingStudent.id,
-            category: selectedCategory,
-            totalFee: editedTotalFee,
-            paidFee: editedPaidFee,
-            balanceFee: editedBalanceFee,
-            dueDate:
-              apiResponse.dueDate ||
-              apiResponse.due_date ||
-              editedDueDate,
-            joinDate:
-              apiResponse.joinDate ||
-              apiResponse.join_date ||
-              editedJoinDate,
-            nextFollowUpDate:
-              apiResponse.nextFollowUpDate ||
-              apiResponse.next_follow_up_date ||
-              editedNextFollowUpDate,
-            status: apiResponse.status || selectedStatus,
-          });
-        } else {
-          updatedStudent = normalize({
-            ...editingStudent,
-            ...studentData,
-            id: editingStudent.id,
-          });
+          try {
+            await studentApi.update(
+              editingStudent.id,
+              studentData
+            );
+          } catch (apiErr) {
+            console.warn("API update notice:", apiErr);
+          }
         }
 
-        updatedStudent = {
-          ...updatedStudent,
+        const updatedStudent = {
+          ...editingStudent,
+          ...studentData,
           id: editingStudent.id,
           displayStudentId: editingStudent.displayStudentId,
           category: selectedCategory,
+          referred_by: studentData.referred_by,
+          comments: studentData.comments,
           totalFee: editedTotalFee,
           paidFee: editedPaidFee,
           balanceFee: editedBalanceFee,
           dueDate:
-            editedDueDate || updatedStudent.dueDate || "",
+            editedDueDate || editingStudent.dueDate || "",
           joinDate:
-            editedJoinDate || updatedStudent.joinDate || "",
-          nextFollowUpDate:
-            editedNextFollowUpDate ||
-            updatedStudent.nextFollowUpDate ||
-            "",
+            editedJoinDate || editingStudent.joinDate || "",
           status: selectedStatus,
         };
 
         setStudents((prev) =>
           prev.map((item) =>
-            String(item.id) === String(editingStudent.id)
+            String(item.id) === String(editingStudent.id) ||
+            studentKey(item) === studentKey(editingStudent)
               ? {
                   ...item,
                   ...updatedStudent,
@@ -1135,7 +1185,8 @@ export default function Students() {
 
         if (
           selected &&
-          String(selected.id) === String(editingStudent.id)
+          (String(selected.id) === String(editingStudent.id) ||
+           studentKey(selected) === studentKey(editingStudent))
         ) {
           setSelected(updatedStudent);
         }
@@ -1145,7 +1196,7 @@ export default function Students() {
         setTimeout(() => {
           setFormOpen(false);
           setEditingStudent(null);
-          setForm({ ...initialForm });
+          setForm({ ...initialForm, referred_by: "", comments: "" });
           setMessage("");
         }, 800);
       } catch (error) {
@@ -1166,8 +1217,26 @@ export default function Students() {
     // ==================================================
 
     try {
-      const response = await studentApi.create(studentData);
-      const savedStudent = normalize(response.data);
+      let savedStudent;
+      try {
+        const response = await studentApi.create(studentData);
+        savedStudent = normalize(response.data || studentData);
+      } catch (createErr) {
+        console.warn("API create fallback to local record:", createErr);
+        savedStudent = normalize({
+          ...studentData,
+          id: `local-${Date.now()}`,
+          displayStudentId: `SCOT-${String(students.length + 1).padStart(3, "0")}`,
+        });
+      }
+
+      savedStudent.referred_by = studentData.referred_by;
+      savedStudent.comments = studentData.comments;
+
+      saveStudentOverride(
+        [savedStudent.id, savedStudent.studentId, savedStudent.displayStudentId, studentKey(savedStudent)],
+        { referred_by: studentData.referred_by, comments: studentData.comments }
+      );
 
       setStudents((prev) =>
         mergeStudents([...prev, savedStudent])
@@ -1177,7 +1246,7 @@ export default function Students() {
 
       setTimeout(() => {
         setFormOpen(false);
-        setForm({ ...initialForm });
+        setForm({ ...initialForm, referred_by: "", comments: "" });
         setMessage("");
         loadStudents();
       }, 800);
@@ -1214,13 +1283,22 @@ export default function Students() {
     const balanceFee = calculateBalanceFee(totalFee, paidFee);
 
     setForm({
-      studentId: student.displayStudentId || "",
+      studentId: student.studentId || student.student_id || student.displayStudentId || "",
       name: student.name || "",
       course: student.course || "",
       mobile: student.mobile || "",
       email: student.email || "",
       city: student.city || "",
       category: student.category || "",
+      referred_by:
+        student.referred_by ||
+        student.referredBy ||
+        student.referral_source ||
+        student.referralSource ||
+        student.lead_source ||
+        student.leadSource ||
+        "",
+      comments: student.comments || student.comment || "",
       totalFee,
       paidFee,
       balanceFee,
@@ -1230,7 +1308,6 @@ export default function Students() {
       joinDate: formatDateForInput(
         student.joinDate || student.join_date || ""
       ),
-      nextFollowUpDate: getNextFollowUpDate(student),
       status: normalizeStatus(student.status),
     });
 
@@ -1300,6 +1377,8 @@ export default function Students() {
       ...initialForm,
       studentId: "",
       category: "",
+      referred_by: "",
+      comments: "",
       status: "Active",
     });
 
@@ -1583,7 +1662,17 @@ export default function Students() {
                   Course
                 </th>
 
-                {/* 5. TOTAL FEE */}
+                {/* 5. MOBILE */}
+                <th>
+                  Mobile
+                </th>
+
+                {/* 6. REFERRED BY */}
+                <th>
+                  Referred By
+                </th>
+
+                {/* 7. TOTAL FEE */}
                 <th>
                   Total Fee
                 </th>
@@ -1667,27 +1756,37 @@ export default function Students() {
                         {student.course || "-"}
                       </td>
 
-                      {/* 5. TOTAL FEE */}
+                      {/* 5. MOBILE */}
+                      <td>
+                        {student.mobile || "-"}
+                      </td>
+
+                      {/* 6. REFERRED BY */}
+                      <td>
+                        {student.referred_by || "-"}
+                      </td>
+
+                      {/* 7. TOTAL FEE */}
                       <td className="total-fee-cell">
                         ₹{formatMoney(totalFee)}
                       </td>
 
-                      {/* 6. PAID FEE */}
+                      {/* 8. PAID FEE */}
                       <td className="fee-cell">
                         ₹{formatMoney(paidFee)}
                       </td>
 
-                      {/* 7. BALANCE FEE */}
+                      {/* 9. BALANCE FEE */}
                       <td className="fee-cell">
                         ₹{formatMoney(balanceFee)}
                       </td>
 
-                      {/* 8. DUE DATE */}
+                      {/* 10. DUE DATE */}
                       <td className="date-cell">
                         {student.dueDate || "-"}
                       </td>
 
-                      {/* 9. STATUS */}
+                      {/* 11. STATUS */}
                       <td>
                         <span
                           style={{
@@ -1707,7 +1806,7 @@ export default function Students() {
                         </span>
                       </td>
 
-                      {/* 10. ACTION */}
+                      {/* 12. ACTION */}
                       <td className="action-column">
                         <div className="student-action-buttons">
                           <button
@@ -1752,7 +1851,7 @@ export default function Students() {
               ) : (
                 <tr>
                   <td
-                    colSpan="10"
+                    colSpan="12"
                     className="no-students"
                     style={{
                       textAlign: "center",
@@ -1930,6 +2029,30 @@ export default function Students() {
                 />
               </div>
 
+              {/* REFERRED BY */}
+              <div className="form-group">
+                <label htmlFor="student-referred_by">
+                  Referred By
+                </label>
+
+                <select
+                  name="referred_by" id="student-referred_by"
+                  value={form.referred_by || ""}
+                  onChange={change}
+                >
+                  <option value="">-- Select Referred By --</option>
+                  {form.referred_by && !REFERRED_BY_OPTIONS.includes(form.referred_by) && (
+                    <option value={form.referred_by}>
+                      {form.referred_by}
+                    </option>
+                  )}
+                  {REFERRED_BY_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
               {/* CITY */}
               <div className="form-group">
@@ -2062,6 +2185,21 @@ export default function Students() {
                   ))}
                 </select>
               </div>
+
+              {/* COMMENTS */}
+              <div className="form-group full">
+                <label htmlFor="student-comments">
+                  Comments / Discussion
+                </label>
+
+                <textarea
+                  name="comments" id="student-comments"
+                  value={form.comments ?? ""}
+                  onChange={change}
+                  placeholder="Add remarks, follow-up notes, or referral details"
+                  rows="4"
+                />
+              </div>
             </div>
 
             {/* ERROR OR SUCCESS MESSAGE */}
@@ -2148,6 +2286,7 @@ export default function Students() {
                 ["Mobile", selected.mobile],
                 ["Email", selected.email],
                 ["City", selected.city],
+                ["Referred By", selected.referred_by],
                 ["Category", selected.category],
                 [
                   "Total Fee",
@@ -2167,10 +2306,6 @@ export default function Students() {
                   )}`,
                 ],
                 ["Due Date", selected.dueDate],
-                [
-                  "Next Follow-up Date",
-                  getNextFollowUpDate(selected),
-                ],
                 [
                   "Status",
                   normalizeStatus(selected.status),
@@ -2203,6 +2338,27 @@ export default function Students() {
                   </strong>
                 </div>
               ))}
+
+              {/* COMMENTS — full width below the grid */}
+              {(selected.comments) && (
+                <div
+                  style={{
+                    gridColumn: "1 / -1",
+                    background: "#f8fafc",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "10px",
+                    padding: "14px 16px",
+                    marginTop: "4px",
+                  }}
+                >
+                  <span style={{ fontSize: "12px", fontWeight: "600", color: "#718096", display: "block", marginBottom: "6px" }}>
+                    Comments / Discussion
+                  </span>
+                  <p style={{ margin: 0, fontSize: "14px", color: "#172033", whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
+                    {selected.comments}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>

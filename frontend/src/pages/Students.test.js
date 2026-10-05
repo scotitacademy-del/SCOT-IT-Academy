@@ -19,6 +19,7 @@ const joinDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, 
 const students = Array.from({ length: 11 }, (_, i) => ({
   id: i + 1, studentId: `SCOT-${String(20 + i).padStart(3, "0")}`,
   name: `Learner ${i + 1}`, mobile: `90000000${String(i).padStart(2, "0")}`,
+  comments: i === 4 ? "Discussed schedule" : "",
   course: "Web", category: "Development", totalFee: 1000, paidFee: 200, joinDate, status: "Active",
 }));
 async function change(selector, value) {
@@ -30,7 +31,17 @@ async function change(selector, value) {
   });
 }
 async function click(text) {
-  await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent.trim() === text || b.title === text).click());
+  await act(async () => {
+    const button = [...container.querySelectorAll("button")].find((b) => {
+      const title = b.title || "";
+      const ariaLabel = b.getAttribute("aria-label") || "";
+      return b.textContent.trim() === text || title === text || ariaLabel.includes(text);
+    });
+    if (!button) {
+      throw new Error(`Button not found: ${text}`);
+    }
+    button.click();
+  });
 }
 beforeEach(async () => {
   jest.clearAllMocks();
@@ -58,7 +69,12 @@ test("pagination, deletion, search and Excel retain the saved student IDs", asyn
   expect(container.querySelector("tbody").textContent).toContain("Learner 5");
   await click("Download Excel");
   expect(XLSX.utils.json_to_sheet.mock.calls[0][0]).toEqual([
-    expect.objectContaining({ "Student ID": "SCOT-024", "Student Name": "Learner 5", "Join Date": joinDate }),
+    expect.objectContaining({
+      "Student ID": "SCOT-024",
+      "Student Name": "Learner 5",
+      "Join Date": joinDate,
+      "Comments / Discussion": "Discussed schedule",
+    }),
   ]);
   expect(XLSX.writeFile).toHaveBeenCalledTimes(1);
   expect(container.querySelector(".mobile-cell-label").textContent).toBe("Student ID");
@@ -74,11 +90,43 @@ test("Overall filters include historical records and modal preserves saved ID an
   await click("Edit");
   expect(container.querySelector('[role="dialog"]').getAttribute("aria-label")).toBe("Edit student");
   expect(container.querySelector("#student-studentId").value).toBe("OLD-900");
-  expect(container.querySelector('label[for="student-nextFollowUpDate"]')).not.toBeNull();
+  expect(container.querySelector('label[for="student-nextFollowUpDate"]')).toBeNull();
   expect(document.body.style.overflow).toBe("hidden");
   act(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
   expect(container.querySelector('[role="dialog"]')).toBeNull();
   expect(document.body.style.overflow).toBe("");
   await click("+ Add Student");
   expect(container.querySelector("#student-studentId").value).toBe("");
+});
+test("student add form includes referral source and comments fields", async () => {
+  await click("+ Add Student");
+  expect(container.querySelector('select[name="referred_by"]')).not.toBeNull();
+  expect(container.querySelector('textarea[name="comments"]')).not.toBeNull();
+});
+
+test("referral source is shown in the table and updates when a student is edited", async () => {
+  studentApi.list.mockResolvedValue({
+    data: [{ ...students[0], referral_source: "Staff Referral" }],
+  });
+  studentApi.update.mockResolvedValue({
+    data: { referred_by: "Website Lead" },
+  });
+
+  await act(async () => {
+    root.unmount();
+    root = createRoot(container);
+    root.render(<Students />);
+  });
+
+  expect(container.querySelector("tbody").textContent).toContain("Staff Referral");
+  await click("Edit");
+  expect(container.querySelector('select[name="referred_by"]').value).toBe("Staff Referral");
+  await change('select[name="referred_by"]', "Website Lead");
+  await click("Update Student");
+
+  expect(studentApi.update).toHaveBeenCalledWith(
+    students[0].id,
+    expect.objectContaining({ referred_by: "Website Lead" })
+  );
+  expect(container.querySelector("tbody").textContent).toContain("Website Lead");
 });

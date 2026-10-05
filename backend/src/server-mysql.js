@@ -203,6 +203,14 @@ function mapStudent(row) {
     email: row.email,
     city: row.city,
     category: row.category,
+    referred_by:
+      row.referred_by ||
+      row.referral_source ||
+      row.referralSource ||
+      row.lead_source ||
+      row.leadSource ||
+      "",
+    comments: row.comments || "",
 
     paidFee,
     balanceFee,
@@ -855,6 +863,8 @@ app.post(
             email,
             city,
             category,
+            referred_by,
+            comments,
             paid_fee,
             balance_fee,
             total_fee,
@@ -864,7 +874,7 @@ app.post(
             status
           )
           VALUES
-          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `,
           [
             studentId,
@@ -874,6 +884,16 @@ app.post(
             text(b.email),
             text(b.city),
             text(b.category),
+            text(
+              b.referred_by ||
+                b.referredBy ||
+                b.referral_source ||
+                b.referralSource ||
+                b.lead_source ||
+                b.leadSource ||
+                ""
+            ),
+            text(b.comments || b.comment),
             paid,
             balance,
             total,
@@ -917,10 +937,7 @@ app.post(
 // STUDENT - UPDATE
 // ============================================================
 
-app.patch(
-  "/api/students/:id",
-  auth,
-  async (req, res, next) => {
+const updateStudentHandler = async (req, res, next) => {
     try {
       const current =
         await first(
@@ -1035,6 +1052,20 @@ app.patch(
             current.status
         ) || "Joined";
 
+      const referredBy =
+        b.referred_by !== undefined
+          ? text(b.referred_by)
+          : b.referredBy !== undefined
+            ? text(b.referredBy)
+            : text(current.referred_by);
+
+      const comments =
+        b.comments !== undefined
+          ? text(b.comments)
+          : b.comment !== undefined
+            ? text(b.comment)
+            : text(current.comments);
+
       if (!studentId || !name) {
         return res.status(400).json({ message: "Student ID and name are required." });
       }
@@ -1050,6 +1081,8 @@ app.patch(
           email=?,
           city=?,
           category=?,
+          referred_by=?,
+          comments=?,
           paid_fee=?,
           balance_fee=?,
           total_fee=?,
@@ -1067,6 +1100,8 @@ app.patch(
           email,
           city,
           category,
+          referredBy,
+          comments,
           paid,
           balance,
           total,
@@ -1104,8 +1139,10 @@ app.patch(
 
       next(error);
     }
-  }
-);
+};
+
+app.patch("/api/students/:id", auth, updateStudentHandler);
+app.put("/api/students/:id", auth, updateStudentHandler);
 
 // ============================================================
 // STUDENT - DELETE
@@ -3238,6 +3275,11 @@ async function initializeSchema() {
       status VARCHAR(30)
         NOT NULL DEFAULT 'Joined',
 
+      referred_by VARCHAR(150)
+        NOT NULL DEFAULT '',
+
+      comments TEXT,
+
       created_at TIMESTAMP
         DEFAULT CURRENT_TIMESTAMP,
 
@@ -3289,6 +3331,47 @@ async function initializeSchema() {
     console.log(
       "next_followup_date added."
     );
+  }
+
+  // ==========================================================
+  // STUDENTS REFERRAL / COMMENT MIGRATION
+  // ==========================================================
+
+  const [studentReferralColumn] = await db.query("SHOW COLUMNS FROM students LIKE 'referred_by'");
+  if (studentReferralColumn.length === 0) {
+    await db.query(`
+      ALTER TABLE students
+      ADD COLUMN referred_by VARCHAR(150) NOT NULL DEFAULT 'Direct Visit' AFTER status
+    `);
+  }
+
+  const [studentCommentsColumn] = await db.query("SHOW COLUMNS FROM students LIKE 'comments'");
+  if (studentCommentsColumn.length === 0) {
+    await db.query(`
+      ALTER TABLE students
+      ADD COLUMN comments TEXT NULL AFTER referred_by
+    `);
+  }
+
+  // Auto-sync referred_by from enquiries for existing students
+  try {
+    await db.query(`
+      UPDATE students s
+      JOIN enquiries e ON (s.mobile = e.mobile AND s.mobile IS NOT NULL AND s.mobile != '')
+      SET s.referred_by = e.referred_by
+      WHERE (s.referred_by IS NULL OR s.referred_by = '' OR s.referred_by = '-')
+        AND e.referred_by IS NOT NULL AND e.referred_by != ''
+    `);
+
+    await db.query(`
+      UPDATE students s
+      JOIN enquiries e ON (LOWER(TRIM(s.name)) = LOWER(TRIM(e.candidate_name)) AND s.name IS NOT NULL AND s.name != '')
+      SET s.referred_by = e.referred_by
+      WHERE (s.referred_by IS NULL OR s.referred_by = '' OR s.referred_by = '-')
+        AND e.referred_by IS NOT NULL AND e.referred_by != ''
+    `);
+  } catch (syncErr) {
+    console.warn("Notice: student referred_by auto-sync notice:", syncErr.message);
   }
 
   // ==========================================================

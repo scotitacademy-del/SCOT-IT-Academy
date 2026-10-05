@@ -563,7 +563,6 @@ export default function AddEnquiry() {
             options={[
               "Positive",
               "Pending",
-              "Low",
               "Hold",
               "Negative",
               "Completed",

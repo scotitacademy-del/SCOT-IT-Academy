@@ -1053,6 +1053,8 @@ export const studentApi = {
         ...data,
 
         status: data.status || "Active",
+        referred_by: data.referred_by || "",
+        comments: data.comments || "",
 
         paidFee:
           Number(data?.paidFee) || 0,
@@ -1089,7 +1091,9 @@ export const studentApi = {
         dummyData.students
       ),
 
-      status: "Joined",
+      status: data.status || "Joined",
+      referred_by: data.referred_by || "",
+      comments: data.comments || "",
 
       paidFee,
       balanceFee,
@@ -1115,6 +1119,8 @@ export const studentApi = {
         ...data,
 
         status: data.status || "Active",
+        referred_by: data.referred_by !== undefined ? data.referred_by : "",
+        comments: data.comments !== undefined ? data.comments : "",
 
         paidFee:
           Number(data?.paidFee) || 0,
@@ -1166,7 +1172,9 @@ export const studentApi = {
 
       id: oldStudent.id,
 
-      status: "Joined",
+      status: data.status || oldStudent.status || "Joined",
+      referred_by: data.referred_by !== undefined ? data.referred_by : (oldStudent.referred_by || ""),
+      comments: data.comments !== undefined ? data.comments : (oldStudent.comments || ""),
 
       paidFee,
       balanceFee,
