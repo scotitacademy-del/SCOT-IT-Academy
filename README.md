@@ -1,223 +1,221 @@
-SCOT IT Academy — Complete Site Explanation
-1. What is this website?
+# SCOT IT Academy
 
-The SCOT IT Academy Enquiry Follow-up System is an internal CRM/management system for an academy.
+SCOT IT Academy is a full-stack enquiry-to-student management system for an academy. It helps staff manage leads, follow-ups, enrollments, student records, fee tracking, reports, and admin access from a single dashboard.
 
-Its main purpose is:
+## Overview
 
-New Enquiry
-     ↓
-Store Student/Enquiry Details
-     ↓
-Assign Admin / Branch
-     ↓
-Set Follow-up Date
-     ↓
-Follow-up with Candidate
-     ↓
-Update Status
-     ↓
-Candidate Joins
-     ↓
-Create Student
-     ↓
-Track Fees
-     ↓
-Reports / Dashboard
+The application follows a complete workflow:
 
-So this is not just a normal website.
+1. Capture new enquiries
+2. Track candidate details and follow-up dates
+3. Update enquiry status and category
+4. Convert accepted candidates to students
+5. Track fee payments and balances
+6. Review dashboard metrics and reports
+7. Manage admins and academy settings
 
-It is an Enquiry → Follow-up → Admission → Student → Fee Management system.
+This is not just a simple frontend app. It is a working academy CRM with a React frontend and an Express + MySQL backend.
 
-2. Technology Architecture
+## Tech Stack
 
-Your project is divided into two major parts.
+- Frontend: React 19, React Router, CRA / react-scripts
+- Backend: Node.js + Express
+- Database: MySQL
+- Auth: JWT + bcrypt
+- Reporting / export: XLSX, jsPDF
+- HTTP client: Axios
 
-SCOT IT Academy
-│
-├── Frontend
-│   └── React.js
-│
-└── Backend
-    └── Node.js / Express
-        │
-        ├── JWT Authentication
-        ├── REST API
-        └── MySQL Database
+## Project Structure
 
-The README describes the frontend as React and mentions that login can fall back to demo mode when the backend isn't running.
+```text
+SCOT-IT-Academy/
+├── backend/
+│   ├── package.json
+│   ├── src/
+│   │   ├── database.js
+│   │   ├── owner-account.js
+│   │   ├── reset-owner.js
+│   │   ├── server-mysql.js
+│   │   ├── server.js
+│   │   └── student-fees.js
+│   ├── test/
+│   │   ├── owner-account.test.js
+│   │   └── student-fees.test.js
+│   └── data/
+│       └── db.json
+├── docs/
+│   └── login-recovery.md
+├── frontend/
+│   ├── package.json
+│   ├── public/
+│   ├── src/
+│   │   ├── App.js
+│   │   ├── components/
+│   │   ├── data/
+│   │   ├── pages/
+│   │   ├── services/
+│   │   ├── styles.css
+│   │   └── index.js
+│   └── .env
+├── README.md
+└── .gitignore
+```
 
-Your current backend source confirms MySQL tables and Express-style routes such as:
+## Main Features
 
-/api/dashboard
-/api/enquiries
-/api/follow-ups
-/api/categories
-/api/reports
-/api/notifications
-/api/settings
+### Enquiry management
+- Add new enquiries
+- Search and filter by name, course, mobile, category, and status
+- View candidate details
+- Update follow-up dates and status
+- Manage enquiry lifecycle from initial inquiry to enrollment
 
-and these routes are protected by authentication.
+### Student management
+- Add students from accepted enquiries
+- Track student ID, course, fee, due date, join date, and status
+- Calculate remaining balance automatically
+- Search, filter, export, and review student records
 
-3. Frontend
+### Fee tracking
+- Total fee, paid fee, and balance fee calculations
+- Auto calculation of outstanding balance
+- Student fee monitoring across records and dashboard summary
 
-The frontend is the part the staff actually sees.
+### Dashboard and reports
+- Academy overview cards
+- Enquiry follow-up summaries
+- Student and fee metrics
+- XLSX export support
+- Reporting pages for operational analysis
 
-Your README lists these pages:
+### Admin and access control
+- Owner and admin role handling
+- Protected routes and role-based access
+- Categories and settings management
+- Backend owner reset utility for recovery
 
-Dashboard
-Add Enquiry
-Enquiry List
-Students
-Follow-ups
-Reports
-Admins
-Categories
-Refer By
-Settings
+## Current App Flow
 
-The general design is:
+- Login screen for staff access
+- Protected routes after JWT authentication
+- Sidebar navigation for dashboard, enquiries, students, follow-ups, reports, admins, and categories
+- CRUD flow for enquiries, students, categories, and admins
+- Role-based access to owner-only pages like admin and settings management
 
-┌──────────────────────────────────────────────┐
-│ SCOT IT ACADEMY                              │
-├───────────────┬──────────────────────────────┤
-│               │                              │
-│ Dashboard     │                              │
-│ Add Enquiry   │       PAGE CONTENT           │
-│ Enquiry List  │                              │
-│ Students      │                              │
-│ Follow-ups    │                              │
-│ Reports       │                              │
-│ Admins        │                              │
-│ Categories    │                              │
-│ Refer By      │                              │
-│ Settings      │                              │
-│               │                              │
-└───────────────┴──────────────────────────────┘
+## Backend API
 
-The README specifically says the original visual design is preserved with:
+The backend exposes REST endpoints for:
 
-dark blue sidebar
-white cards
-statistic cards
-tables
-forms
-badges
-responsive breakpoints
-student details modal
-4. Login Page
+- Authentication and user login
+- Dashboard metrics
+- Student records
+- Enquiries and follow-ups
+- Categories and admin management
+- Reports, notifications, and settings
 
-The login page is the entrance to the application.
+The backend is configured for MySQL and includes JWT authentication and owner account recovery utilities.
 
-User enters:
+## Frontend Behavior
 
-Username
-Password
+The frontend app includes pages such as:
 
-Example:
+- Dashboard
+- Add Enquiry
+- Enquiry List
+- Students
+- Follow-ups
+- Reports
+- Admins
+- Categories
+- Settings
 
-Username: SCOT
-Password: ********
+The app is designed as a responsive management dashboard with table layouts, filter controls, forms, status chips, and action buttons.
 
-Frontend sends:
+## Setup
 
-POST /api/auth/login
+### Prerequisites
 
-The backend searches the users table by username.
+- Node.js
+- npm
+- MySQL server
+- A working backend `.env` configuration
+- Frontend `.env` for the API URL
 
-Then it compares the entered password against the stored bcrypt password hash.
+### Backend setup
 
-If valid:
+From the `backend` folder:
 
-Username
-   ↓
-Database
-   ↓
-bcrypt password check
-   ↓
-JWT generated
-   ↓
-User returned
-   ↓
-Frontend stores authentication
-   ↓
-Dashboard
+```bash
+npm install
+npm start
+```
 
-Your current login route returns:
+The backend expects environment values such as:
 
-{
-    access: "...JWT...",
-    user: {
-        id,
-        username,
-        name,
-        role
-    }
-}
+```env
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=your_password
+DB_NAME=scot_it_academy
+JWT_SECRET=your_secret
+OWNER_USERNAME=owner
+OWNER_PASSWORD=your_secure_password
+```
 
-This is why your previous 401 Unauthorized was occurring: the backend could not find/validate the configured Owner account.
+If needed, you can reset the owner account with:
 
-5. Owner and Admin System
+```bash
+npm run owner:reset
+```
 
-There are two important roles:
+### Frontend setup
 
-Owner
+From the `frontend` folder:
 
-The Owner is the highest-level account.
+```bash
+npm install
+npm start
+```
 
-The Owner can manage:
+Frontend environment:
 
-Admins
-Categories
-Settings
-Enquiries
-Students
-Reports
-Admin
+```env
+REACT_APP_API_URL=http://localhost:5000/api
+REACT_APP_USE_BACKEND=true
+```
 
-Admins handle enquiries and follow-ups.
+For deployment or hosted backend, replace the URL with the deployed API base.
 
-Your backend has protected admin routes, including updating and deleting administrators. The delete-admin operation specifically requires ownerOnly.
+## Production / Deployment Notes
 
-So conceptually:
+- The backend is expected to run as a Node.js service with access to MySQL.
+- The frontend uses `REACT_APP_API_URL` and `REACT_APP_USE_BACKEND=true` to talk to the backend API instead of local dummy mode.
+- The repo includes a document for login recovery and owner account reset in [docs/login-recovery.md](docs/login-recovery.md).
 
-OWNER
-  │
-  ├── Create Admin
-  ├── Edit Admin
-  ├── Delete Admin
-  ├── Manage Categories
-  ├── Manage Settings
-  └── View all system data
-       │
-       └── ADMIN
-             ├── Enquiries
-             ├── Follow-ups
-             └── Students
-6. Dashboard
+## Testing
 
-The Dashboard is the first main page after login.
+Backend tests are available in the `backend/test` folder.
 
-It gives a quick overview of the academy.
+```bash
+cd backend
+npm test
+```
 
-The backend calculates values including:
+Frontend tests are also present for some key pages, for example `Students.test.js`.
 
-Total Students
-Joined Students
-Total Fee
-Recent Enquiries
-Follow-ups
-Category statistics
+```bash
+cd frontend
+npx react-scripts test --watchAll=false --runInBand
+```
 
-The dashboard calculates total students and joined students directly from the students table and calculates total fees from total_fee.
+## Notes
 
-It also retrieves recent enquiries with:
+This project is currently configured as an academy CRM with all core admin workflows implemented across the frontend and backend. The codebase is organized around data-driven pages, simplified state management, and role-aware access control.
 
-Admin
-Candidate Name
-Mobile
-City
-Category
+## Summary
+
+SCOT IT Academy is a complete enquiry, follow-up, admission, student, and fee management system designed for academy operations. It combines a React frontend for staff workflows with a MySQL-backed Express API to support real academic administration tasks.
+
 Course
 Next Follow-up
 Status
