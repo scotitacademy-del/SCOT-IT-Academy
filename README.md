@@ -6,7 +6,7 @@ SCOT IT Academy is an enquiry and student management application for academy sta
 
 - JWT-authenticated owner and admin access
 - Enquiry creation, search, editing, status tracking, referral sources, and follow-up scheduling
-- Student records with generated SCOT IDs, course and contact details, referral source, comments, and fee balances
+- Student records with generated `ST-001`-style IDs, course and contact details, referral source, comments, and fee balances
 - Dashboard metrics, monthly/yearly reports, lead-source breakdowns, and CSV, Excel, and PDF exports
 - Category, referral-source, admin, and academy settings management
 - Due-fee notifications

@@ -854,9 +854,9 @@ export default function Students() {
     return sorted.map((student, index) => {
       let displayStudentId = String(student.studentId || student.student_id || student.id || "").trim();
 
-      // Ensure consistent SCOT-xxx sequential format (e.g. SCOT-001, SCOT-002, SCOT-005)
-      if (!displayStudentId || !displayStudentId.startsWith("SCOT-")) {
-        displayStudentId = `SCOT-${String(index + 1).padStart(3, "0")}`;
+      // Ensure consistent ST-xxx sequential format (e.g. ST-001, ST-002, ST-005)
+      if (!displayStudentId || !displayStudentId.startsWith("ST-")) {
+        displayStudentId = `ST-${String(index + 1).padStart(3, "0")}`;
       }
 
       return {
@@ -1576,7 +1576,7 @@ export default function Students() {
             <input
               type="text"
               aria-label="Search students"
-              placeholder="Search ID (SCOT-001), name, course..."
+              placeholder="Search ID (ST-001), name, course..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{
@@ -1793,7 +1793,7 @@ export default function Students() {
                         studentKey(student)
                       }
                     >
-                      {/* 1. STUDENT ID (Matches screenshot: bold, dark, sequential SCOT-001, SCOT-002...) */}
+                      {/* 1. STUDENT ID (bold, dark, sequential ST-001, ST-002...) */}
                       <td className="student-id-cell">
                         <span className="student-id-text">
                           {student.displayStudentId}
@@ -2039,7 +2039,7 @@ export default function Students() {
                 >
                   {editingStudent
                     ? "Student ID is unique and cannot be modified."
-                    : "Auto-generated continuous sequence (e.g. SCOT-001, SCOT-002...)."}
+                    : "Auto-generated continuous sequence (e.g. ST-001, ST-002...)."}
                 </small>
               </div>
 

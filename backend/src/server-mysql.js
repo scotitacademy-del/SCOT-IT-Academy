@@ -699,13 +699,13 @@ app.get(
   auth,
   async (req, res, next) => {
     try {
-      // Fix any non-standard student_id (ensuring SCOT-001, SCOT-002, etc.) in DB on the fly
+      // Fix any non-standard student_id (ensuring ST-001, ST-002, etc.) in DB on the fly
       try {
         const [allStudents] = await db.query(
           "SELECT id, student_id FROM students ORDER BY id ASC"
         );
         const needsMigration = allStudents.some(
-          (s, index) => s.student_id !== `SCOT-${String(index + 1).padStart(3, "0")}`
+          (s, index) => s.student_id !== `ST-${String(index + 1).padStart(3, "0")}`
         );
         if (needsMigration && allStudents.length > 0) {
           for (const s of allStudents) {
@@ -715,7 +715,7 @@ app.get(
             ]);
           }
           for (let i = 0; i < allStudents.length; i++) {
-            const finalId = `SCOT-${String(i + 1).padStart(3, "0")}`;
+            const finalId = `ST-${String(i + 1).padStart(3, "0")}`;
             await db.query("UPDATE students SET student_id=? WHERE id=?", [
               finalId,
               allStudents[i].id,
@@ -811,7 +811,7 @@ app.post(
             if (val > maxNum) maxNum = val;
           }
         }
-        studentId = `SCOT-${String(maxNum + 1).padStart(3, "0")}`;
+        studentId = `ST-${String(maxNum + 1).padStart(3, "0")}`;
       }
 
       const dueDate =
@@ -3687,14 +3687,14 @@ async function initializeSchema() {
   `);
 
   // ==========================================================
-  // NORMALIZE EXISTING STUDENT IDs TO CONTINUOUS SCOT-xxx FORMAT
+  // NORMALIZE EXISTING STUDENT IDs TO CONTINUOUS ST-xxx FORMAT
   // ==========================================================
   try {
     const [allStudents] = await db.query(
       "SELECT id, student_id FROM students ORDER BY id ASC"
     );
     const needsMigration = allStudents.some(
-      (s, index) => s.student_id !== `SCOT-${String(index + 1).padStart(3, "0")}`
+      (s, index) => s.student_id !== `ST-${String(index + 1).padStart(3, "0")}`
     );
     if (needsMigration && allStudents.length > 0) {
       for (const s of allStudents) {
@@ -3704,7 +3704,7 @@ async function initializeSchema() {
         ]);
       }
       for (let i = 0; i < allStudents.length; i++) {
-        const finalId = `SCOT-${String(i + 1).padStart(3, "0")}`;
+        const finalId = `ST-${String(i + 1).padStart(3, "0")}`;
         await db.query("UPDATE students SET student_id=? WHERE id=?", [
           finalId,
           allStudents[i].id,

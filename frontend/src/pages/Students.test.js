@@ -18,7 +18,7 @@ let root, container;
 const now = new Date();
 const joinDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
 const students = Array.from({ length: 11 }, (_, i) => ({
-  id: i + 1, studentId: `SCOT-${String(20 + i).padStart(3, "0")}`,
+  id: i + 1, studentId: `ST-${String(20 + i).padStart(3, "0")}`,
   name: `Learner ${i + 1}`, mobile: `90000000${String(i).padStart(2, "0")}`,
   comments: i === 4 ? "Discussed schedule" : "",
   staffPayout: i === 4 ? 50 : 0,
@@ -63,17 +63,17 @@ test("pagination, deletion, search and Excel retain the saved student IDs", asyn
   expect(container.querySelectorAll("tbody tr")).toHaveLength(10);
   await click("Next");
   expect(container.querySelectorAll("tbody tr")).toHaveLength(1);
-  expect(container.querySelector("tbody").textContent).toContain("SCOT-030");
+  expect(container.querySelector("tbody").textContent).toContain("ST-030");
   await click("Delete");
   expect(studentApi.delete).toHaveBeenCalledWith(11);
   expect(container.querySelectorAll("tbody tr")).toHaveLength(10);
-  await change('[aria-label="Search students"]', "SCOT-024");
+  await change('[aria-label="Search students"]', "ST-024");
   expect(container.querySelectorAll("tbody tr")).toHaveLength(1);
   expect(container.querySelector("tbody").textContent).toContain("Learner 5");
   await click("Download Excel");
   expect(XLSX.utils.json_to_sheet.mock.calls[0][0]).toEqual([
     expect.objectContaining({
-      "Student ID": "SCOT-024",
+      "Student ID": "ST-024",
       "Student Name": "Learner 5",
       "Join Date": joinDate,
       "Comments / Discussion": "Discussed schedule",
@@ -114,7 +114,7 @@ test("student add form includes referral source and comments fields", async () =
 
 test("student payout calculates net profit and is saved when creating a student", async () => {
   studentApi.create.mockImplementation(async (data) => ({
-    data: { ...data, id: 20, studentId: "SCOT-040" },
+    data: { ...data, id: 20, studentId: "ST-040" },
   }));
   studentApi.update.mockResolvedValue({
     data: { staffPayout: 75, netProfit: 125 },
@@ -142,7 +142,7 @@ test("student payout calculates net profit and is saved when creating a student"
     ])
   );
 
-  await change('[aria-label="Search students"]', "SCOT-040");
+  await change('[aria-label="Search students"]', "ST-040");
   await click("Edit");
   expect(container.querySelector('input[name="staffPayout"]').value).toBe("50");
   await change("#student-staffPayout", "75");
