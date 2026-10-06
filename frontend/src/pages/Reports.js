@@ -96,6 +96,8 @@ function numberValue(value) {
 function paidFeeOf(row)    { return numberValue(row.paidFee    ?? row.paid_fee    ?? 0); }
 function totalFeeOf(row)   { return numberValue(row.totalFee   ?? row.total_fee   ?? 0); }
 function balanceFeeOf(row) { return numberValue(row.balanceFee ?? row.balance_fee ?? 0); }
+function staffPayoutOf(row) { return numberValue(row.staffPayout ?? row.staff_payout ?? 0); }
+function netProfitOf(row)  { return paidFeeOf(row) - staffPayoutOf(row); }
 
 function formatAmount(value) {
   return `₹${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
@@ -514,16 +516,24 @@ export default function Reports() {
   const maxStudLead = Math.max(1, ...studentLeadSource.map((s) => s.count));
 
   // ====================================================
-  // MONTHLY BAR DATA (for amount chart — only Overall Year)
+  // MONTHLY BAR DATA (for amount and net-profit charts)
   // ====================================================
 
   const monthCount =
     selectedYear < currentYear  ? 12 :
     selectedYear === currentYear ? currentMonth + 1 : 0;
 
-  const visibleMonths = MONTH_LABELS.slice(0, monthCount).map((label, index) => ({
+  const yearMonths = MONTH_LABELS.slice(0, monthCount).map((label, index) => ({
     label, month: index, year: selectedYear,
   }));
+
+  const visibleMonths = safeSelectedMonth === -1
+    ? yearMonths
+    : [{
+        label: MONTH_LABELS[safeSelectedMonth],
+        month: safeSelectedMonth,
+        year: selectedYear,
+      }];
 
   const monthlyAmounts = visibleMonths.map((m) =>
     studentRows
@@ -534,6 +544,15 @@ export default function Reports() {
       .reduce((sum, s) => sum + paidFeeOf(s), 0)
   );
 
+  const monthlyNetProfits = visibleMonths.map((m) =>
+    studentRows
+      .filter((s) => {
+        const d = parseDate(joinDateOf(s));
+        return d && d.getFullYear() === m.year && d.getMonth() === m.month;
+      })
+      .reduce((sum, s) => sum + netProfitOf(s), 0)
+  );
+
   const monthlyJoined = visibleMonths.map((m) =>
     studentRows.filter((s) => {
       const d = parseDate(joinDateOf(s));
@@ -542,6 +561,8 @@ export default function Reports() {
   );
 
   const maxMonthlyAmount = Math.max(1, ...monthlyAmounts);
+  const maxMonthlyNetProfit = Math.max(1, ...monthlyNetProfits.map(Math.abs));
+  const yearlyNetProfit = filteredStudents.reduce((sum, student) => sum + netProfitOf(student), 0);
 
   // ====================================================
   // AMOUNT DETAILS FOR EXPORT
@@ -985,8 +1006,7 @@ export default function Reports() {
           Only shown when "Overall Year" is selected
       ================================================ */}
 
-      {safeSelectedMonth === -1 && (
-        <div style={{ marginBottom: "22px" }}>
+      <div style={{ marginBottom: "22px" }}>
           <Panel
             title="Monthly Amount"
             subtitle={
@@ -1069,8 +1089,90 @@ export default function Reports() {
               </div>
             )}
           </Panel>
-        </div>
-      )}
+      </div>
+
+      <div style={{ marginBottom: "22px" }}>
+          <Panel
+            title="Monthly Net Profit"
+            subtitle={
+              visibleMonths.length === 0
+                ? `No net profit data — ${selectedYear} hasn't started`
+                : `${formatAmount(yearlyNetProfit)} net profit from ${joinedCount} students`
+            }
+            action={
+              <strong style={{ fontSize: "14px", color: "#172033" }}>
+                Total: {formatAmount(yearlyNetProfit)}
+              </strong>
+            }
+          >
+            {visibleMonths.length > 0 ? (
+              <div style={{ width: "100%", overflowX: "auto", paddingBottom: "10px" }}>
+                <div style={{
+                  minWidth: Math.max(700, visibleMonths.length * 75) + "px",
+                  height: "340px",
+                  display: "flex",
+                  alignItems: "flex-end",
+                  gap: "18px",
+                  padding: "25px 20px 10px",
+                  borderBottom: "1px solid #e2e8f0",
+                }}>
+                  {visibleMonths.map((month, index) => {
+                    const netProfit = monthlyNetProfits[index];
+                    const joined = monthlyJoined[index];
+                    const barHeight = netProfit !== 0
+                      ? Math.max(8, (Math.abs(netProfit) / maxMonthlyNetProfit) * 245)
+                      : 5;
+                    const barColor = netProfit < 0 ? "#dc2626" : "#10b981";
+
+                    return (
+                      <div
+                        key={`${month.year}-${month.month}-profit`}
+                        style={{
+                          flex: "1", minWidth: "50px", height: "100%",
+                          display: "flex", flexDirection: "column",
+                          alignItems: "center", justifyContent: "flex-end",
+                        }}
+                      >
+                        <strong style={{
+                          fontSize: "11px",
+                          color: netProfit < 0 ? "#b42318" : "#172033",
+                          marginBottom: "6px",
+                          whiteSpace: "nowrap",
+                        }}>
+                          {formatAmount(netProfit)}
+                        </strong>
+                        <div
+                          style={{
+                            width: "32px",
+                            height: `${barHeight}px`,
+                            background: barColor,
+                            borderRadius: "7px 7px 0 0",
+                            transition: "height 0.3s ease",
+                          }}
+                          title={`${month.label} ${selectedYear}: ${formatAmount(netProfit)} net profit`}
+                        />
+                        <span style={{ marginTop: "8px", fontSize: "12px", fontWeight: "600", color: "#4a5568" }}>
+                          {month.label}
+                        </span>
+                        <small style={{ marginTop: "3px", fontSize: "10px", color: "#718096" }}>
+                          {joined} joined
+                        </small>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div style={{
+                height: "250px", display: "flex", alignItems: "center", justifyContent: "center",
+                color: "#a0aec0", gap: "8px",
+              }}>
+                <span style={{ fontSize: "36px" }}>₹</span>
+                <strong style={{ fontSize: "15px", color: "#718096" }}>No net profit data yet</strong>
+              </div>
+            )}
+          </Panel>
+      </div>
 
       {/* ================================================
           STATUS SUMMARY TABLE (always shown)
