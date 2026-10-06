@@ -2,11 +2,12 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import * as XLSX from "xlsx";
 import Students from "./Students";
-import { studentApi, categoryApi } from "../services/api";
+import { studentApi, categoryApi, enquiryApi } from "../services/api";
 
 jest.mock("../services/api", () => ({
   studentApi: { list: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
   categoryApi: { list: jest.fn() },
+  enquiryApi: { list: jest.fn().mockResolvedValue({ data: [] }) },
 }));
 jest.mock("xlsx", () => ({
   utils: { json_to_sheet: jest.fn(() => ({})), book_new: jest.fn(() => ({})), book_append_sheet: jest.fn() },
@@ -20,6 +21,8 @@ const students = Array.from({ length: 11 }, (_, i) => ({
   id: i + 1, studentId: `SCOT-${String(20 + i).padStart(3, "0")}`,
   name: `Learner ${i + 1}`, mobile: `90000000${String(i).padStart(2, "0")}`,
   comments: i === 4 ? "Discussed schedule" : "",
+  staffPayout: i === 4 ? 50 : 0,
+  netProfit: i === 4 ? 150 : 200,
   course: "Web", category: "Development", totalFee: 1000, paidFee: 200, joinDate, status: "Active",
 }));
 async function change(selector, value) {
@@ -74,6 +77,8 @@ test("pagination, deletion, search and Excel retain the saved student IDs", asyn
       "Student Name": "Learner 5",
       "Join Date": joinDate,
       "Comments / Discussion": "Discussed schedule",
+      "Staff Payout": 50,
+      "Net Profit": 150,
     }),
   ]);
   expect(XLSX.writeFile).toHaveBeenCalledTimes(1);
@@ -102,6 +107,53 @@ test("student add form includes referral source and comments fields", async () =
   await click("+ Add Student");
   expect(container.querySelector('select[name="referred_by"]')).not.toBeNull();
   expect(container.querySelector('textarea[name="comments"]')).not.toBeNull();
+  expect(container.querySelector('input[name="staffPayout"]')).not.toBeNull();
+  expect(container.querySelector('input[name="netProfit"]')).not.toBeNull();
+  expect([...container.querySelectorAll("thead th")].map((cell) => cell.textContent).join(" ")).not.toMatch(/Staff Payout|Net Profit/);
+});
+
+test("student payout calculates net profit and is saved when creating a student", async () => {
+  studentApi.create.mockImplementation(async (data) => ({
+    data: { ...data, id: 20, studentId: "SCOT-040" },
+  }));
+  studentApi.update.mockResolvedValue({
+    data: { staffPayout: 75, netProfit: 125 },
+  });
+
+  await click("+ Add Student");
+  await change("#student-name", "New Learner");
+  await change("#student-course", "Web");
+  await change("#student-totalFee", "500");
+  await change("#student-paidFee", "200");
+  await change("#student-staffPayout", "50");
+  await change("#student-joinDate", joinDate);
+
+  expect(container.querySelector('input[name="netProfit"]').value).toBe("150");
+  await click("Add Student");
+
+  expect(studentApi.create).toHaveBeenCalledWith(
+    expect.objectContaining({ staffPayout: 50, netProfit: 150 })
+  );
+  expect(container.querySelector("thead").textContent).not.toMatch(/Staff Payout|Net Profit/);
+  await click("Download Excel");
+  expect(XLSX.utils.json_to_sheet.mock.calls[0][0]).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ "Staff Payout": 50, "Net Profit": 150 }),
+    ])
+  );
+
+  await change('[aria-label="Search students"]', "SCOT-040");
+  await click("Edit");
+  expect(container.querySelector('input[name="staffPayout"]').value).toBe("50");
+  await change("#student-staffPayout", "75");
+
+  expect(container.querySelector('input[name="netProfit"]').value).toBe("125");
+  await click("Update Student");
+
+  expect(studentApi.update).toHaveBeenCalledWith(
+    20,
+    expect.objectContaining({ staffPayout: 75, netProfit: 125 })
+  );
 });
 
 test("referral source is shown in the table and updates when a student is edited", async () => {

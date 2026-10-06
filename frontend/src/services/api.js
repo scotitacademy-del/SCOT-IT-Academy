@@ -1055,6 +1055,10 @@ export const studentApi = {
         status: data.status || "Active",
         referred_by: data.referred_by || "",
         comments: data.comments || "",
+        staffPayout: Number(data?.staffPayout ?? data?.staff_payout) || 0,
+        netProfit:
+          (Number(data?.paidFee) || 0) -
+          (Number(data?.staffPayout ?? data?.staff_payout) || 0),
 
         paidFee:
           Number(data?.paidFee) || 0,
@@ -1080,6 +1084,11 @@ export const studentApi = {
     const balanceFee =
       Number(data?.balanceFee) || 0;
 
+    const staffPayout =
+      Number(data?.staffPayout ?? data?.staff_payout) || 0;
+
+    const netProfit = paidFee - staffPayout;
+
     const totalFee =
       Number(data?.totalFee) ||
       paidFee + balanceFee;
@@ -1096,6 +1105,8 @@ export const studentApi = {
       comments: data.comments || "",
 
       paidFee,
+      staffPayout,
+      netProfit,
       balanceFee,
       totalFee,
     };
@@ -1121,6 +1132,10 @@ export const studentApi = {
         status: data.status || "Active",
         referred_by: data.referred_by !== undefined ? data.referred_by : "",
         comments: data.comments !== undefined ? data.comments : "",
+        staffPayout: Number(data?.staffPayout ?? data?.staff_payout) || 0,
+        netProfit:
+          (Number(data?.paidFee) || 0) -
+          (Number(data?.staffPayout ?? data?.staff_payout) || 0),
 
         paidFee:
           Number(data?.paidFee) || 0,
@@ -1159,6 +1174,11 @@ export const studentApi = {
     const paidFee =
       Number(data?.paidFee) || 0;
 
+    const staffPayout =
+      Number(data?.staffPayout ?? data?.staff_payout) || 0;
+
+    const netProfit = paidFee - staffPayout;
+
     const balanceFee =
       Number(data?.balanceFee) || 0;
 
@@ -1177,6 +1197,8 @@ export const studentApi = {
       comments: data.comments !== undefined ? data.comments : (oldStudent.comments || ""),
 
       paidFee,
+      staffPayout,
+      netProfit,
       balanceFee,
       totalFee,
     };

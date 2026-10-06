@@ -106,6 +106,8 @@ const initialForm = {
 
   totalFee: "",
   paidFee: "",
+  staffPayout: "",
+  netProfit: 0,
   balanceFee: "",
 
   dueDate: "",
@@ -127,6 +129,16 @@ const calculateBalanceFee = (
 
   return Math.max(total - paid, 0);
 };
+
+const calculateNetProfit = (
+  paidFee,
+  staffPayout
+) => Number(paidFee || 0) - Number(staffPayout || 0);
+
+const requirePersistedStudentFinance = (response) => {
+  return response?.data?.data || response?.data || {};
+};
+
 
 // ======================================================
 // FORMAT DATE
@@ -220,6 +232,21 @@ const normalize = (
       paidFee
     );
 
+  const rawStaffPayout = Number(
+    student.staffPayout ??
+      student.staff_payout ??
+      0
+  );
+  const staffPayout = Number.isFinite(rawStaffPayout)
+    ? rawStaffPayout
+    : 0;
+  const rawNetProfit =
+    student.netProfit ??
+    student.net_profit;
+  const netProfit = rawNetProfit === undefined || rawNetProfit === null || rawNetProfit === ""
+    ? calculateNetProfit(paidFee, staffPayout)
+    : Number(rawNetProfit) || 0;
+
   const databaseId =
     student.id ??
     student.databaseId ??
@@ -303,6 +330,8 @@ const normalize = (
 
     totalFee,
     paidFee,
+    staffPayout,
+    netProfit,
     balanceFee,
 
     dueDate:
@@ -751,7 +780,9 @@ export default function Students() {
 
       const [studentResponse, enquiryResponse] = await Promise.allSettled([
         studentApi.list(),
-        enquiryApi.list(),
+        typeof enquiryApi?.list === "function"
+          ? enquiryApi.list()
+          : Promise.resolve({ data: [] }),
       ]);
 
       const apiData =
@@ -938,6 +969,7 @@ export default function Students() {
       const excelData = filteredStudents.map((student) => {
         const totalFee = Number(student.totalFee) || 0;
         const paidFee = Number(student.paidFee) || 0;
+        const staffPayout = Number(student.staffPayout) || 0;
         const balanceFee = calculateBalanceFee(totalFee, paidFee);
 
         return {
@@ -951,6 +983,8 @@ export default function Students() {
           "Category": student.category || "",
           "Total Fee": totalFee,
           "Paid Fee": paidFee,
+          "Staff Payout": staffPayout,
+          "Net Profit": calculateNetProfit(paidFee, staffPayout),
           "Balance Fee": balanceFee,
           "Due Date": student.dueDate || "",
           "Status": normalizeStatus(student.status),
@@ -988,6 +1022,8 @@ export default function Students() {
         { wch: 22 }, // Category
         { wch: 14 }, // Total Fee
         { wch: 14 }, // Paid Fee
+        { wch: 16 }, // Staff Payout
+        { wch: 14 }, // Net Profit
         { wch: 14 }, // Balance Fee
         { wch: 14 }, // Due Date
         { wch: 14 }, // Status
@@ -1053,6 +1089,13 @@ export default function Students() {
         );
       }
 
+      if (name === "paidFee" || name === "staffPayout") {
+        next.netProfit = calculateNetProfit(
+          next.paidFee,
+          next.staffPayout
+        );
+      }
+
       if (name === "status") {
         next.status = normalizeStatus(value);
       }
@@ -1082,10 +1125,21 @@ export default function Students() {
 
     const editedTotalFee = Number(form.totalFee) || 0;
     const editedPaidFee = Number(form.paidFee) || 0;
+    const editedStaffPayout = Number(form.staffPayout) || 0;
+    const editedNetProfit = calculateNetProfit(
+      editedPaidFee,
+      editedStaffPayout
+    );
     const editedBalanceFee = calculateBalanceFee(
       editedTotalFee,
       editedPaidFee
     );
+
+    if (!Number.isFinite(editedStaffPayout) || editedStaffPayout < 0) {
+      setMessage("Staff Payout must be a valid non-negative amount.");
+      setSaving(false);
+      return;
+    }
 
     if (editedPaidFee > editedTotalFee) {
       setMessage("Paid Fee cannot be greater than Total Fee.");
@@ -1107,6 +1161,8 @@ export default function Students() {
       comments: form.comments || "",
       totalFee: editedTotalFee,
       paidFee: editedPaidFee,
+      staffPayout: editedStaffPayout,
+      netProfit: editedNetProfit,
       balanceFee: editedBalanceFee,
       dueDate: editedDueDate,
       joinDate: editedJoinDate,
@@ -1136,20 +1192,19 @@ export default function Students() {
         saveStudentOverride(studentIdKeys, {
           referred_by: studentData.referred_by,
           comments: studentData.comments,
+          staffPayout: studentData.staffPayout,
+          netProfit: studentData.netProfit,
         });
 
         if (
           editingStudent.id &&
           !String(editingStudent.id).startsWith("local-")
         ) {
-          try {
-            await studentApi.update(
-              editingStudent.id,
-              studentData
-            );
-          } catch (apiErr) {
-            console.warn("API update notice:", apiErr);
-          }
+          const response = await studentApi.update(
+            editingStudent.id,
+            studentData
+          );
+          requirePersistedStudentFinance(response);
         }
 
         const updatedStudent = {
@@ -1162,6 +1217,8 @@ export default function Students() {
           comments: studentData.comments,
           totalFee: editedTotalFee,
           paidFee: editedPaidFee,
+          staffPayout: editedStaffPayout,
+          netProfit: editedNetProfit,
           balanceFee: editedBalanceFee,
           dueDate:
             editedDueDate || editingStudent.dueDate || "",
@@ -1217,25 +1274,24 @@ export default function Students() {
     // ==================================================
 
     try {
-      let savedStudent;
-      try {
-        const response = await studentApi.create(studentData);
-        savedStudent = normalize(response.data || studentData);
-      } catch (createErr) {
-        console.warn("API create fallback to local record:", createErr);
-        savedStudent = normalize({
-          ...studentData,
-          id: `local-${Date.now()}`,
-          displayStudentId: `SCOT-${String(students.length + 1).padStart(3, "0")}`,
-        });
-      }
+      const response = await studentApi.create(studentData);
+      const savedStudent = normalize(
+        requirePersistedStudentFinance(response)
+      );
 
       savedStudent.referred_by = studentData.referred_by;
       savedStudent.comments = studentData.comments;
+      savedStudent.staffPayout = editedStaffPayout;
+      savedStudent.netProfit = editedNetProfit;
 
       saveStudentOverride(
         [savedStudent.id, savedStudent.studentId, savedStudent.displayStudentId, studentKey(savedStudent)],
-        { referred_by: studentData.referred_by, comments: studentData.comments }
+        {
+          referred_by: studentData.referred_by,
+          comments: studentData.comments,
+          staffPayout: editedStaffPayout,
+          netProfit: editedNetProfit,
+        }
       );
 
       setStudents((prev) =>
@@ -1301,6 +1357,11 @@ export default function Students() {
       comments: student.comments || student.comment || "",
       totalFee,
       paidFee,
+      staffPayout: Number(student.staffPayout ?? student.staff_payout ?? 0) || 0,
+      netProfit: calculateNetProfit(
+        paidFee,
+        student.staffPayout ?? student.staff_payout ?? 0
+      ),
       balanceFee,
       dueDate: formatDateForInput(
         student.dueDate || student.due_date || ""
@@ -2102,6 +2163,53 @@ export default function Students() {
                   placeholder="Enter paid fee"
                   required
                 />
+              </div>
+
+              {/* STAFF PAYOUT */}
+              <div className="form-group">
+                <label htmlFor="student-staffPayout">
+                  Staff Payout
+                </label>
+
+                <input
+                  name="staffPayout" id="student-staffPayout"
+                  value={form.staffPayout ?? ""}
+                  onChange={change}
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Enter staff payout"
+                />
+              </div>
+
+              {/* NET PROFIT */}
+              <div className="form-group">
+                <label htmlFor="student-netProfit">
+                  Net Profit
+                </label>
+
+                <input
+                  name="netProfit" id="student-netProfit"
+                  value={calculateNetProfit(form.paidFee, form.staffPayout)}
+                  type="number"
+                  readOnly
+                  tabIndex="-1"
+                  style={{
+                    backgroundColor: "#f3f4f6",
+                    cursor: "not-allowed",
+                  }}
+                />
+
+                <small
+                  style={{
+                    display: "block",
+                    marginTop: "5px",
+                    color: "#667085",
+                    fontSize: "12px",
+                  }}
+                >
+                  Paid Fee − Staff Payout
+                </small>
               </div>
 
               {/* BALANCE FEE */}

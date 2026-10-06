@@ -1076,7 +1076,7 @@ export default function Reports() {
           STATUS SUMMARY TABLE (always shown)
       ================================================ */}
 
-      <div style={{ marginBottom: "22px" }}>
+      {/* <div style={{ marginBottom: "22px" }}>
         <Panel title="Status Summary" subtitle={`Enquiry status breakdown · ${MONTH_FULL[currentMonth]} ${currentYear}`}>
           <div className="report-list">
             {statusSummaryCounts.map(({ label, count }) => (
@@ -1087,7 +1087,7 @@ export default function Reports() {
             ))}
           </div>
         </Panel>
-      </div>
+      </div> */}
     </>
   );
 }

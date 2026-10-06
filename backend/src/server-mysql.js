@@ -189,6 +189,12 @@ function mapStudent(row) {
       paidFee + balanceFee
     );
 
+  const staffPayout =
+    amount(row.staff_payout);
+
+  const netProfit =
+    amount(row.net_profit, paidFee - staffPayout);
+
   const nextFollowUpDate =
     dateOnly(
       row.next_followup_date
@@ -213,6 +219,8 @@ function mapStudent(row) {
     comments: row.comments || "",
 
     paidFee,
+    staffPayout,
+    netProfit,
     balanceFee,
     totalFee,
 
@@ -788,7 +796,7 @@ app.post(
       const b =
         req.body || {};
 
-      const { paid, balance, total } = studentFees(b);
+      const { paid, balance, total, staffPayout, netProfit } = studentFees(b);
 
       let studentId = text(b.studentId ?? b.student_id);
       if (!studentId) {
@@ -866,6 +874,8 @@ app.post(
             referred_by,
             comments,
             paid_fee,
+            staff_payout,
+            net_profit,
             balance_fee,
             total_fee,
             due_date,
@@ -874,7 +884,7 @@ app.post(
             status
           )
           VALUES
-          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `,
           [
             studentId,
@@ -895,6 +905,8 @@ app.post(
             ),
             text(b.comments || b.comment),
             paid,
+            staffPayout,
+            netProfit,
             balance,
             total,
             dueDate,
@@ -964,7 +976,7 @@ const updateStudentHandler = async (req, res, next) => {
       const b =
         req.body || {};
 
-      const { paid, balance, total } = studentFees(b, current);
+      const { paid, balance, total, staffPayout, netProfit } = studentFees(b, current);
 
       const studentId =
         text(
@@ -1084,6 +1096,8 @@ const updateStudentHandler = async (req, res, next) => {
           referred_by=?,
           comments=?,
           paid_fee=?,
+          staff_payout=?,
+          net_profit=?,
           balance_fee=?,
           total_fee=?,
           due_date=?,
@@ -1103,6 +1117,8 @@ const updateStudentHandler = async (req, res, next) => {
           referredBy,
           comments,
           paid,
+          staffPayout,
+          netProfit,
           balance,
           total,
           dueDate,
@@ -3260,6 +3276,12 @@ async function initializeSchema() {
       paid_fee DECIMAL(12,2)
         NOT NULL DEFAULT 0,
 
+      staff_payout DECIMAL(12,2)
+        NOT NULL DEFAULT 0,
+
+      net_profit DECIMAL(12,2)
+        NOT NULL DEFAULT 0,
+
       balance_fee DECIMAL(12,2)
         NOT NULL DEFAULT 0,
 
@@ -3350,6 +3372,26 @@ async function initializeSchema() {
     await db.query(`
       ALTER TABLE students
       ADD COLUMN comments TEXT NULL AFTER referred_by
+    `);
+  }
+
+  const [studentStaffPayoutColumn] = await db.query("SHOW COLUMNS FROM students LIKE 'staff_payout'");
+  if (studentStaffPayoutColumn.length === 0) {
+    await db.query(`
+      ALTER TABLE students
+      ADD COLUMN staff_payout DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER paid_fee
+    `);
+  }
+
+  const [studentNetProfitColumn] = await db.query("SHOW COLUMNS FROM students LIKE 'net_profit'");
+  if (studentNetProfitColumn.length === 0) {
+    await db.query(`
+      ALTER TABLE students
+      ADD COLUMN net_profit DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER staff_payout
+    `);
+    await db.query(`
+      UPDATE students
+      SET net_profit = paid_fee - staff_payout
     `);
   }
 
