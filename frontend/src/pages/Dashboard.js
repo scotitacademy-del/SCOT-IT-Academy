@@ -2220,7 +2220,6 @@ export default function Dashboard() {
             {[
               "Positive",
               "Pending",
-              "Low",
               "Hold",
               "Negative",
               "Completed",
