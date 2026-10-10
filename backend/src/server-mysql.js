@@ -517,6 +517,183 @@ app.put(
 );
 
 // ============================================================
+// AUTH - UPDATE OWNER CREDENTIALS (USERNAME + PASSWORD TOGETHER)
+// ============================================================
+
+app.put(
+  "/api/auth/update-credentials",
+  auth,
+  ownerOnly,
+  async (req, res, next) => {
+    try {
+      const newUsername =
+        text(req.body?.new_username);
+
+      const currentPassword =
+        req.body?.current_password || "";
+
+      const newPassword =
+        req.body?.new_password || "";
+
+      if (!currentPassword) {
+        return res.status(400).json({
+          message:
+            "Please enter your current password.",
+        });
+      }
+
+      const owner =
+        await first(
+          `
+          SELECT
+            id,
+            username,
+            password_hash,
+            name,
+            role
+          FROM users
+          WHERE id=?
+            AND role='Owner'
+          LIMIT 1
+          `,
+          [req.user.id]
+        );
+
+      if (!owner) {
+        return res.status(404).json({
+          message:
+            "Owner account not found.",
+        });
+      }
+
+      const validPassword =
+        await bcrypt.compare(
+          currentPassword,
+          owner.password_hash
+        );
+
+      if (!validPassword) {
+        return res.status(401).json({
+          message:
+            "Current password is incorrect.",
+        });
+      }
+
+      // Build dynamic SET clause
+      const setClauses = [];
+      const params = [];
+
+      // Update username if provided and different
+      if (newUsername && newUsername.toLowerCase() !== owner.username.toLowerCase()) {
+        const existingUser =
+          await first(
+            `
+            SELECT id FROM users
+            WHERE LOWER(username)=LOWER(?)
+            LIMIT 1
+            `,
+            [newUsername]
+          );
+
+        if (
+          existingUser &&
+          Number(existingUser.id) !== Number(owner.id)
+        ) {
+          return res.status(409).json({
+            message:
+              "This username is already in use.",
+          });
+        }
+
+        setClauses.push("username=?");
+        params.push(newUsername);
+      }
+
+      // Update password if provided
+      if (newPassword) {
+        if (newPassword.length < 6) {
+          return res.status(400).json({
+            message:
+              "New password must contain at least 6 characters.",
+          });
+        }
+
+        if (currentPassword === newPassword) {
+          return res.status(400).json({
+            message:
+              "New password must be different from your current password.",
+          });
+        }
+
+        const newPasswordHash =
+          await bcrypt.hash(newPassword, 12);
+
+        setClauses.push("password_hash=?");
+        params.push(newPasswordHash);
+      }
+
+      if (setClauses.length === 0) {
+        return res.status(400).json({
+          message:
+            "No changes to apply.",
+        });
+      }
+
+      params.push(owner.id);
+
+      await db.execute(
+        `UPDATE users SET ${setClauses.join(", ")} WHERE id=? AND role='Owner'`,
+        params
+      );
+
+      const updatedOwner =
+        await first(
+          `
+          SELECT
+            id,
+            username,
+            name,
+            role
+          FROM users
+          WHERE id=?
+            AND role='Owner'
+          LIMIT 1
+          `,
+          [owner.id]
+        );
+
+      const access =
+        issueToken(updatedOwner);
+
+      const parts = [];
+      if (newUsername && newUsername.toLowerCase() !== owner.username.toLowerCase()) {
+        parts.push("Username");
+      }
+      if (newPassword) {
+        parts.push("Password");
+      }
+
+      return res.json({
+        message:
+          `${parts.join(" and ")} updated successfully.`,
+        access,
+        user:
+          publicUser(updatedOwner),
+      });
+    } catch (error) {
+      if (error?.code === "ER_DUP_ENTRY") {
+        return res.status(409).json({
+          message:
+            "This username is already in use.",
+        });
+      }
+
+      next(error);
+    }
+  }
+);
+
+// ============================================================
 // AUTH - UPDATE OWNER PASSWORD
 // ============================================================
 
@@ -3726,9 +3903,20 @@ async function initializeSchema() {
 // ============================================================
 
 async function ensureDefaultOwner() {
-  // reset:true ensures OWNER_USERNAME/OWNER_PASSWORD env vars are always applied
-  // on every startup, so credential changes in Render take effect without a shell.
-  await ensureOwner(db, process.env, { reset: true });
+  // Only seed credentials from env vars when NO owner exists yet (first boot).
+  // If an owner already exists in the database, skip the reset so any
+  // credentials updated via the app UI are preserved across server restarts.
+  const [rows] = await db.execute(
+    "SELECT id FROM users WHERE role='Owner' LIMIT 1"
+  );
+
+  if (rows.length === 0) {
+    // First boot: create owner from OWNER_USERNAME / OWNER_PASSWORD env vars.
+    await ensureOwner(db, process.env, { reset: false });
+    console.log("Owner account created from environment variables.");
+  } else {
+    console.log("Owner account already exists in database — skipping env reset.");
+  }
 }
 
 // ============================================================
