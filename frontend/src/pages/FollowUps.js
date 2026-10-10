@@ -381,17 +381,10 @@ export default function FollowUps() {
     }
 
     // ==================================================
-    // UPDATE SELECTED DATA
+    // CLOSE MODAL AFTER SAVE
     // ==================================================
 
-    setSelected(
-      updatedRow
-    );
-
-    setEditForm({
-      date: followUpDate,
-      discussion,
-    });
+    closeModal();
   }
 
   // ======================================================
