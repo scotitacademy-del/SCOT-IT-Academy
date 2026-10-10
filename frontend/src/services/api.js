@@ -749,6 +749,94 @@ export const authApi = {
     return response;
   },
 
+  updateCredentials: async (
+    data = {}
+  ) => {
+    const currentPassword =
+      String(data?.current_password || "");
+
+    const newUsername =
+      String(data?.new_username || "").trim();
+
+    const newPassword =
+      String(data?.new_password || "");
+
+    if (!currentPassword) {
+      throw new Error("Please enter your current password.");
+    }
+
+    if (!newUsername && !newPassword) {
+      throw new Error("Please enter a new username or new password.");
+    }
+
+    if (!getAccessToken()) {
+      throw new Error("Authentication token is missing. Please login again.");
+    }
+
+    let lastResponse = null;
+    let lastUser = getCurrentUser();
+    const parts = [];
+
+    /*
+     * Step 1 — Update username if it changed.
+     * This call also returns a fresh JWT which we store
+     * before making the second call.
+     */
+    if (newUsername) {
+      const res1 = await api.put("/auth/update-owner", {
+        username: newUsername,
+        current_password: currentPassword,
+      });
+
+      const token1 = getResponseToken(res1.data);
+      const user1 = res1.data?.user || null;
+
+      if (token1) {
+        setAuthSession(token1, user1 || lastUser);
+      } else if (user1) {
+        setCurrentUser(user1);
+      }
+
+      if (user1) lastUser = user1;
+      lastResponse = res1;
+      parts.push("Username");
+    }
+
+    /*
+     * Step 2 — Update password (uses the refreshed JWT from step 1).
+     */
+    if (newPassword) {
+      const res2 = await api.put("/auth/update-password", {
+        current_password: currentPassword,
+        new_password: newPassword,
+      });
+
+      const token2 = getResponseToken(res2.data);
+      const user2 = res2.data?.user || null;
+
+      if (token2) {
+        setAuthSession(token2, user2 || lastUser);
+      } else if (user2) {
+        setCurrentUser(user2);
+      }
+
+      lastResponse = res2;
+      parts.push("Password");
+    }
+
+    /*
+     * Return a unified response so the caller can show one success message.
+     */
+    return {
+      ...(lastResponse || {}),
+      data: {
+        ...(lastResponse?.data || {}),
+        message: `${parts.join(" and ")} updated successfully.`,
+        user: lastUser,
+      },
+    };
+  },
+
   me: () =>
     api.get(
       "/auth/me"
