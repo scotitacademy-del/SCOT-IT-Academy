@@ -1,22 +1,34 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   authApi,
   getCurrentUser,
   getAccessToken,
-  setAuthSession,
 } from "../services/api";
 
 export default function Signup() {
-  const [username, setUsername] = useState("");
-  const [currentPassword, setCurrentPassword] =
-    useState("");
+  const navigate = useNavigate();
+
+  const currentUser = getCurrentUser();
+
+  // Pre-fill with current username
+  const [newUsername, setNewUsername] = useState(
+    currentUser?.username || ""
+  );
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const navigate = useNavigate();
+  // Redirect if not logged in
+  useEffect(() => {
+    if (!getAccessToken() || !getCurrentUser()) {
+      navigate("/login", { replace: true });
+    }
+  }, [navigate]);
 
   async function submit(e) {
     e.preventDefault();
@@ -24,250 +36,114 @@ export default function Signup() {
     setError("");
     setSuccess("");
 
-    const cleanUsername =
-      String(username || "").trim();
+    const cleanUsername = newUsername.trim();
+    const cleanCurrentPassword = currentPassword;
+    const cleanNewPassword = newPassword;
+    const cleanConfirmPassword = confirmPassword;
 
-    const cleanCurrentPassword =
-      String(currentPassword || "");
-
-    /*
-     * ==================================================
-     * VALIDATION
-     * ==================================================
-     */
-
-    if (!cleanUsername) {
-      setError(
-        "Please enter owner username."
-      );
-      return;
-    }
-
+    // ── Validation ──────────────────────────────────
     if (!cleanCurrentPassword) {
+      setError("Please enter your current password.");
+      return;
+    }
+
+    const usernameChanged =
+      cleanUsername &&
+      cleanUsername.toLowerCase() !== (currentUser?.username || "").toLowerCase();
+
+    const passwordChanged = !!cleanNewPassword;
+
+    if (!usernameChanged && !passwordChanged) {
       setError(
-        "Please enter your current password."
+        "No changes detected. Enter a new username or a new password to update."
       );
       return;
     }
 
-    /*
-     * ==================================================
-     * CHECK LOGIN SESSION
-     * ==================================================
-     */
+    if (passwordChanged) {
+      if (cleanNewPassword.length < 6) {
+        setError("New password must contain at least 6 characters.");
+        return;
+      }
+      if (cleanNewPassword !== cleanConfirmPassword) {
+        setError("New password and confirm password do not match.");
+        return;
+      }
+      if (cleanCurrentPassword === cleanNewPassword) {
+        setError(
+          "New password must be different from your current password."
+        );
+        return;
+      }
+    }
 
-    const currentUser =
-      getCurrentUser();
-
-    const token =
-      getAccessToken();
-
-    /*
-     * The Update Account page requires
-     * the owner to already be logged in.
-     */
-
-    if (!currentUser) {
-      setError(
-        "You are not logged in. Please login first."
-      );
+    const role = String(currentUser?.role || "").toLowerCase();
+    if (role !== "owner" && role !== "administrator") {
+      setError("Only the owner can update the owner account.");
       return;
     }
 
-    if (!token) {
-      setError(
-        "Your login session has expired. Please login again."
-      );
-      return;
-    }
-
-    /*
-     * ==================================================
-     * CHECK OWNER ROLE
-     * ==================================================
-     */
-
-    const role =
-      String(
-        currentUser?.role || ""
-      ).trim().toLowerCase();
-
-    if (
-      role !== "owner" &&
-      role !== "administrator"
-    ) {
-      setError(
-        "Only the owner can update the owner username."
-      );
-      return;
-    }
-
-    /*
-     * ==================================================
-     * START LOADING
-     * ==================================================
-     */
-
+    // ── Submit ───────────────────────────────────────
     setLoading(true);
 
     try {
-      /*
-       * ==================================================
-       * UPDATE OWNER USERNAME
-       * ==================================================
-       *
-       * The existing JWT will automatically be sent
-       * by api.js interceptor.
-       */
+      const payload = {
+        current_password: cleanCurrentPassword,
+      };
 
-      const res =
-        await authApi.updateOwner({
-          username: cleanUsername,
-          current_password:
-            cleanCurrentPassword,
-        });
-
-      /*
-       * ==================================================
-       * GET RESPONSE USER
-       * ==================================================
-       */
-
-      const updatedUser =
-        res?.data?.user ||
-        null;
-
-      /*
-       * ==================================================
-       * GET NEW JWT
-       * ==================================================
-       */
-
-      const newToken =
-        res?.data?.access ||
-        res?.data?.token ||
-        res?.data?.access_token ||
-        null;
-
-      /*
-       * ==================================================
-       * SAVE AUTH SESSION
-       * ==================================================
-       */
-
-      if (updatedUser) {
-        setAuthSession(
-          newToken || token,
-          updatedUser
-        );
-      } else {
-        /*
-         * If backend doesn't return user,
-         * update the existing local user.
-         */
-
-        const updatedLocalUser = {
-          ...currentUser,
-          username:
-            cleanUsername,
-        };
-
-        setAuthSession(
-          newToken || token,
-          updatedLocalUser
-        );
+      if (usernameChanged) {
+        payload.new_username = cleanUsername;
       }
 
-      /*
-       * ==================================================
-       * SUCCESS
-       * ==================================================
-       */
+      if (passwordChanged) {
+        payload.new_password = cleanNewPassword;
+      }
 
-      setSuccess(
-        "Owner username updated successfully."
-      );
+      const res = await authApi.updateCredentials(payload);
 
+      const msg =
+        res?.data?.message || "Account updated successfully.";
+
+      setSuccess(msg);
+
+      // Clear sensitive fields
       setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
 
-      /*
-       * ==================================================
-       * REDIRECT
-       * ==================================================
-       */
-
+      // Go to login so user logs in with new credentials
       setTimeout(() => {
-        navigate("/dashboard");
-      }, 1000);
-
-    } catch (error) {
-      console.error(
-        "Owner username update failed:",
-        error
-      );
-
-      const status =
-        error?.response?.status;
-
+        navigate("/login");
+      }, 1800);
+    } catch (err) {
+      const status = err?.response?.status;
       const backendMessage =
-        error?.response?.data?.message ||
-        error?.response?.data?.detail ||
-        error?.response?.data?.error ||
+        err?.response?.data?.message ||
+        err?.response?.data?.detail ||
+        err?.response?.data?.error ||
         "";
-
-      /*
-       * ==================================================
-       * 401
-       * ==================================================
-       */
 
       if (status === 401) {
         setError(
           backendMessage ||
-          "Current password is incorrect or your login session has expired. Please login again."
+            "Current password is incorrect. Please try again."
         );
-      }
-
-      /*
-       * ==================================================
-       * 400
-       * ==================================================
-       */
-
-      else if (status === 400) {
+      } else if (status === 409) {
+        setError(
+          backendMessage || "This username is already in use."
+        );
+      } else if (status === 400) {
         setError(
           backendMessage ||
-          "Unable to update owner username. Please check the entered details."
+            "Invalid input. Please check the entered details."
         );
-      }
-
-      /*
-       * ==================================================
-       * 403
-       * ==================================================
-       */
-
-      else if (status === 403) {
+      } else {
         setError(
           backendMessage ||
-          "You do not have permission to update the owner account."
+            err?.message ||
+            "Update failed. Please try again."
         );
       }
-
-      /*
-       * ==================================================
-       * OTHER ERROR
-       * ==================================================
-       */
-
-      else {
-        setError(
-          backendMessage ||
-          error?.message ||
-          "Owner username update failed."
-        );
-      }
-
     } finally {
       setLoading(false);
     }
@@ -275,30 +151,16 @@ export default function Signup() {
 
   return (
     <div className="login-screen">
-
       <div className="login-card">
 
-        {/* ==================================================
-            LOGO
-        ================================================== */}
-
+        {/* LOGO */}
         <div className="login-logo">
           <h2>SCOT</h2>
           <p>IT ACADEMY</p>
         </div>
 
-
-        {/* ==================================================
-            TITLE
-        ================================================== */}
-
-        <div
-          style={{
-            textAlign: "center",
-            marginBottom: "28px",
-          }}
-        >
-
+        {/* TITLE */}
+        <div style={{ textAlign: "center", marginBottom: "28px" }}>
           <div
             style={{
               display: "inline-block",
@@ -314,87 +176,100 @@ export default function Signup() {
           >
             UPDATE ACCOUNT
           </div>
-
+          <p style={{ margin: 0, color: "#607d9d", fontSize: "14px" }}>
+            Change your username and/or password below.
+          </p>
         </div>
 
-
-        {/* ==================================================
-            FORM
-        ================================================== */}
-
+        {/* FORM */}
         <form onSubmit={submit}>
 
-          {/* ==================================================
-              OWNER USERNAME
-          ================================================== */}
-
+          {/* NEW USERNAME */}
           <div className="login-field">
-
-            <label htmlFor="owner-username">
-              Owner Username
-            </label>
-
+            <label htmlFor="new-username">New Username</label>
             <input
-              id="owner-username"
+              id="new-username"
               type="text"
-              value={username}
-              onChange={(e) =>
-                setUsername(
-                  e.target.value
-                )
-              }
-              placeholder="Enter new owner username"
+              value={newUsername}
+              onChange={(e) => setNewUsername(e.target.value)}
+              placeholder="Enter new username"
               autoComplete="username"
               disabled={loading}
-              required
             />
-
           </div>
 
-
-          {/* ==================================================
-              CURRENT PASSWORD
-          ================================================== */}
-
+          {/* CURRENT PASSWORD */}
           <div className="login-field">
-
             <label htmlFor="current-password">
-              Current Password
+              Current Password <span style={{ color: "#e53" }}>*</span>
             </label>
-
             <input
               id="current-password"
               type="password"
               value={currentPassword}
-              onChange={(e) =>
-                setCurrentPassword(
-                  e.target.value
-                )
-              }
-              placeholder="Enter current password"
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="Enter your current password"
               autoComplete="current-password"
               disabled={loading}
               required
             />
-
           </div>
 
+          {/* NEW PASSWORD */}
+          <div className="login-field">
+            <label htmlFor="new-password">
+              New Password{" "}
+              <span style={{ color: "#607d9d", fontWeight: 400, fontSize: "12px" }}>
+                (leave blank to keep current)
+              </span>
+            </label>
+            <input
+              id="new-password"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Enter new password"
+              autoComplete="new-password"
+              disabled={loading}
+            />
+          </div>
 
-          {/* ==================================================
-              ERROR
-          ================================================== */}
-
-          {error && (
-            <div className="login-error">
-              {error}
+          {/* CONFIRM PASSWORD */}
+          {newPassword && (
+            <div className="login-field">
+              <label htmlFor="confirm-password">Confirm New Password</label>
+              <input
+                id="confirm-password"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Confirm new password"
+                autoComplete="new-password"
+                disabled={loading}
+                required
+              />
             </div>
           )}
 
+          {/* PASSWORD HINT */}
+          {newPassword && (
+            <div
+              style={{
+                fontSize: "13px",
+                color: "#607d9d",
+                marginBottom: "15px",
+              }}
+            >
+              Password must contain at least 6 characters.
+            </div>
+          )}
 
-          {/* ==================================================
-              SUCCESS
-          ================================================== */}
+          {/* ERROR */}
+          {error && (
+            <div className="login-error">{error}</div>
+          )}
 
+          {/* SUCCESS */}
           {success && (
             <div
               style={{
@@ -407,67 +282,26 @@ export default function Signup() {
                 textAlign: "center",
               }}
             >
-              {success}
+              {success} Redirecting to login…
             </div>
           )}
 
-
-          {/* ==================================================
-              UPDATE BUTTON
-          ================================================== */}
-
+          {/* SUBMIT */}
           <button
             type="submit"
             className="primary login-btn"
             disabled={loading}
           >
-            {loading
-              ? "Updating..."
-              : "Update Owner Account"}
+            {loading ? "Updating..." : "Update Account"}
           </button>
 
-
-          {/* ==================================================
-              FORGOT PASSWORD
-          ================================================== */}
-
-          <div
-            style={{
-              textAlign: "center",
-              marginTop: "16px",
-            }}
-          >
-
-            <Link
-              to="/forgot-password"
-              style={{
-                color: "#145a96",
-                fontWeight: "600",
-                textDecoration: "none",
-              }}
-            >
-              Forgot Password?
-            </Link>
-
-          </div>
-
-
-          {/* ==================================================
-              BACK TO LOGIN
-          ================================================== */}
-
+          {/* BACK */}
           <div className="login-links">
-
-            <Link to="/login">
-              Back to login
-            </Link>
-
+            <Link to="/dashboard">Back to Dashboard</Link>
           </div>
 
         </form>
-
       </div>
-
     </div>
   );
 }
