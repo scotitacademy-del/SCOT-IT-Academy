@@ -97,6 +97,18 @@ function dateOnly(value) {
   return null;
 }
 
+function isValidDateOnly(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) {
+    return false;
+  }
+
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day;
+}
+
 async function first(sql, params = []) {
   const [rows] = await db.execute(sql, params);
   return rows[0];
@@ -3124,6 +3136,222 @@ app.get(
 // ============================================================
 
 app.get(
+  "/api/students/:id/payments",
+  auth,
+  async (req, res, next) => {
+    try {
+      const [rows] = await db.execute(
+        `
+        SELECT
+          p.id,
+          p.student_id AS studentId,
+          s.name AS studentName,
+          p.amount,
+          p.paid_date AS paidDate
+        FROM student_payments p
+        JOIN students s ON s.id=p.student_id
+        WHERE s.id=? OR s.student_id=?
+        ORDER BY p.paid_date DESC, p.id DESC
+        `,
+        [req.params.id, req.params.id]
+      );
+
+      return res.json(rows.map((row) => ({
+        ...row,
+        amount: amount(row.amount),
+      })));
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+app.post(
+  "/api/students/:id/payments",
+  auth,
+  async (req, res, next) => {
+    const paidAmount = Number(req.body?.amount);
+    const paidDate = dateOnly(
+      req.body?.paidDate ??
+        req.body?.paid_date
+    );
+    const recordOnly = req.body?.recordOnly === true;
+
+    if (!Number.isFinite(paidAmount) || paidAmount <= 0) {
+      return res.status(400).json({
+        message: "Payment amount must be greater than zero.",
+      });
+    }
+
+    if (!isValidDateOnly(paidDate)) {
+      return res.status(400).json({
+        message: "A valid paid date is required.",
+      });
+    }
+
+    let connection;
+    try {
+      connection = await db.getConnection();
+      await connection.beginTransaction();
+
+      const [students] = await connection.execute(
+        `
+        SELECT id, name
+        FROM students
+        WHERE id=? OR student_id=?
+        LIMIT 1
+        FOR UPDATE
+        `,
+        [req.params.id, req.params.id]
+      );
+
+      const student = students[0];
+      if (!student) {
+        await connection.rollback();
+        return res.status(404).json({
+          message: "Student not found.",
+        });
+      }
+
+      const [result] = await connection.execute(
+        `
+        INSERT INTO student_payments
+          (student_id, amount, paid_date)
+        VALUES (?, ?, ?)
+        `,
+        [student.id, paidAmount, paidDate]
+      );
+
+      if (!recordOnly) {
+        await connection.execute(
+          `
+          UPDATE students
+          SET
+            paid_fee=paid_fee+?,
+            balance_fee=GREATEST(balance_fee-?, 0)
+          WHERE id=?
+          `,
+          [paidAmount, paidAmount, student.id]
+        );
+      }
+
+      const [updatedRows] = await connection.execute(
+        "SELECT * FROM students WHERE id=?",
+        [student.id]
+      );
+      await connection.commit();
+
+      return res.status(201).json({
+        payment: {
+          id: result.insertId,
+          studentId: student.id,
+          studentName: student.name,
+          amount: paidAmount,
+          paidDate,
+        },
+        student: mapStudent(updatedRows[0]),
+      });
+    } catch (error) {
+      if (connection) {
+        await connection.rollback();
+      }
+      next(error);
+    } finally {
+      if (connection) {
+        connection.release();
+      }
+    }
+  }
+);
+
+app.get(
+  "/api/reports/monthly-payments",
+  auth,
+  async (req, res, next) => {
+    const year = req.query.year === undefined
+      ? new Date().getFullYear()
+      : Number(req.query.year);
+
+    if (!Number.isInteger(year) || year < 1900 || year > 9999) {
+      return res.status(400).json({
+        message: "Year must be a valid four-digit year.",
+      });
+    }
+
+    try {
+      const [rows] = await db.execute(
+        `
+        SELECT
+          MONTH(paid_date) AS month,
+          COALESCE(SUM(amount), 0) AS total
+        FROM student_payments
+        WHERE YEAR(paid_date)=?
+        GROUP BY MONTH(paid_date)
+        ORDER BY MONTH(paid_date)
+        `,
+        [year]
+      );
+      const [yearRows] = await db.query(
+        `
+        SELECT DISTINCT YEAR(paid_date) AS year
+        FROM student_payments
+        ORDER BY year DESC
+        `
+      );
+      const [payments] = await db.execute(
+        `
+        SELECT
+          p.id,
+          p.student_id AS studentId,
+          s.student_id AS studentCode,
+          s.name AS studentName,
+          s.mobile,
+          s.city,
+          s.category,
+          s.course,
+          s.join_date AS joinDate,
+          s.total_fee AS totalFee,
+          s.paid_fee AS paidFee,
+          s.balance_fee AS balanceFee,
+          p.amount,
+          p.paid_date AS paidDate
+        FROM student_payments p
+        JOIN students s ON s.id=p.student_id
+        WHERE YEAR(p.paid_date)=?
+        ORDER BY p.paid_date, p.id
+        `,
+        [year]
+      );
+      const monthlyAmounts = Array(12).fill(0);
+      rows.forEach((row) => {
+        monthlyAmounts[Number(row.month) - 1] = amount(row.total);
+      });
+      const availableYears = [
+        ...new Set([
+          new Date().getFullYear(),
+          ...yearRows.map((row) => Number(row.year)),
+        ]),
+      ].sort((a, b) => b - a);
+
+      return res.json({
+        year,
+        monthlyAmounts,
+        availableYears,
+        payments: payments.map((payment) => ({
+          ...payment,
+          amount: amount(payment.amount),
+          totalFee: amount(payment.totalFee),
+          paidFee: amount(payment.paidFee),
+          balanceFee: amount(payment.balanceFee),
+        })),
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+app.get(
   "/api/reports",
   auth,
   async (req, res, next) => {
@@ -3494,6 +3722,22 @@ async function initializeSchema() {
     )
     ENGINE=InnoDB
     DEFAULT CHARSET=utf8mb4
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS student_payments (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      student_id INT UNSIGNED NOT NULL,
+      amount DECIMAL(12,2) NOT NULL,
+      paid_date DATE NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY idx_student_payments_paid_date (paid_date),
+      KEY idx_student_payments_student (student_id),
+      CONSTRAINT fk_student_payments_student
+        FOREIGN KEY (student_id) REFERENCES students(id)
+        ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `);
 
   // ==========================================================
