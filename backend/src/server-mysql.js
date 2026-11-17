@@ -1018,6 +1018,13 @@ app.post(
           .toISOString()
           .slice(0, 10);
 
+      const paidDate =
+        dateOnly(
+          b.paidDate ??
+            b.paid_date ??
+            b.initialPaymentDate
+        );
+
       const nextFollowUpDate =
         dateOnly(
           b.nextFollowUpDate ??
@@ -1048,87 +1055,122 @@ app.post(
         });
       }
 
-      const [result] =
-        await db.execute(
-          `
-          INSERT INTO students
-          (
-            student_id,
-            name,
-            course,
-            mobile,
-            email,
-            city,
-            category,
-            referred_by,
-            comments,
-            paid_fee,
-            staff_payout,
-            net_profit,
-            balance_fee,
-            total_fee,
-            due_date,
-            join_date,
-            next_followup_date,
-            status
-          )
-          VALUES
-          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `,
-          [
-            studentId,
-            name,
-            text(b.course),
-            mobile,
-            text(b.email),
-            text(b.city),
-            text(b.category),
-            text(
-              b.referred_by ||
-                b.referredBy ||
-                b.referral_source ||
-                b.referralSource ||
-                b.lead_source ||
-                b.leadSource ||
-                ""
-            ),
-            text(b.comments || b.comment),
-            paid,
-            staffPayout,
-            netProfit,
-            balance,
-            total,
-            dueDate,
-            joinDate,
-            nextFollowUpDate,
-            status,
-          ]
-        );
-
-      const saved =
-        await first(
-          `
-          SELECT *
-          FROM students
-          WHERE id=?
-          `,
-          [result.insertId]
-        );
-
-      return res.status(201).json(
-        mapStudent(saved)
-      );
-    } catch (error) {
-      if (
-        error?.code ===
-        "ER_DUP_ENTRY"
-      ) {
-        return res.status(409).json({
+      if (paid > 0 && !isValidDateOnly(paidDate)) {
+        return res.status(400).json({
           message:
-            "Student ID already exists.",
+            "A valid paid date is required for an initial payment.",
         });
       }
 
+      let connection;
+      try {
+        connection = await db.getConnection();
+        await connection.beginTransaction();
+
+        const [result] =
+          await connection.execute(
+            `
+            INSERT INTO students
+            (
+              student_id,
+              name,
+              course,
+              mobile,
+              email,
+              city,
+              category,
+              referred_by,
+              comments,
+              paid_fee,
+              staff_payout,
+              net_profit,
+              balance_fee,
+              total_fee,
+              due_date,
+              join_date,
+              next_followup_date,
+              status
+            )
+            VALUES
+            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `,
+            [
+              studentId,
+              name,
+              text(b.course),
+              mobile,
+              text(b.email),
+              text(b.city),
+              text(b.category),
+              text(
+                b.referred_by ||
+                  b.referredBy ||
+                  b.referral_source ||
+                  b.referralSource ||
+                  b.lead_source ||
+                  b.leadSource ||
+                  ""
+              ),
+              text(b.comments || b.comment),
+              paid,
+              staffPayout,
+              netProfit,
+              balance,
+              total,
+              dueDate,
+              joinDate,
+              nextFollowUpDate,
+              status,
+            ]
+          );
+
+        if (paid > 0) {
+          await connection.execute(
+            `
+            INSERT INTO student_payments
+              (student_id, amount, paid_date)
+            VALUES (?, ?, ?)
+            `,
+            [result.insertId, paid, paidDate]
+          );
+        }
+
+        const [savedRows] =
+          await connection.execute(
+            `
+            SELECT *
+            FROM students
+            WHERE id=?
+            `,
+            [result.insertId]
+          );
+        await connection.commit();
+
+        return res.status(201).json(
+          mapStudent(savedRows[0])
+        );
+      } catch (error) {
+        if (connection) {
+          await connection.rollback();
+        }
+
+        if (
+          error?.code ===
+          "ER_DUP_ENTRY"
+        ) {
+          return res.status(409).json({
+            message:
+              "Student ID already exists.",
+          });
+        }
+
+        next(error);
+      } finally {
+        if (connection) {
+          connection.release();
+        }
+      }
+    } catch (error) {
       next(error);
     }
   }
@@ -3322,6 +3364,18 @@ app.get(
         `,
         [year]
       );
+      const [unrecordedRows] = await db.execute(
+        `
+        SELECT COUNT(*) AS count
+        FROM students s
+        LEFT JOIN (
+          SELECT student_id, SUM(amount) AS recorded_amount
+          FROM student_payments
+          GROUP BY student_id
+        ) p ON p.student_id=s.id
+        WHERE COALESCE(s.paid_fee, 0) > COALESCE(p.recorded_amount, 0)
+        `
+      );
       const monthlyAmounts = Array(12).fill(0);
       rows.forEach((row) => {
         monthlyAmounts[Number(row.month) - 1] = amount(row.total);
@@ -3337,6 +3391,7 @@ app.get(
         year,
         monthlyAmounts,
         availableYears,
+        unrecordedPaidStudentCount: Number(unrecordedRows[0]?.count || 0),
         payments: payments.map((payment) => ({
           ...payment,
           amount: amount(payment.amount),
