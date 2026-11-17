@@ -3364,26 +3364,84 @@ app.get(
         `,
         [year]
       );
-      const [unrecordedRows] = await db.execute(
+      const [legacyRows] = await db.execute(
         `
-        SELECT COUNT(*) AS count
+        SELECT
+          s.id,
+          s.student_id AS studentCode,
+          s.name AS studentName,
+          s.mobile,
+          s.city,
+          s.category,
+          s.course,
+          s.join_date AS joinDate,
+          s.join_date AS paidDate,
+          s.total_fee AS totalFee,
+          s.paid_fee AS paidFee,
+          s.balance_fee AS balanceFee,
+          COALESCE(s.paid_fee, 0) - COALESCE(p.recorded_amount, 0) AS amount
         FROM students s
         LEFT JOIN (
           SELECT student_id, SUM(amount) AS recorded_amount
           FROM student_payments
           GROUP BY student_id
         ) p ON p.student_id=s.id
-        WHERE COALESCE(s.paid_fee, 0) > COALESCE(p.recorded_amount, 0)
+        WHERE s.join_date IS NOT NULL
+          AND YEAR(s.join_date) BETWEEN 1900 AND 9999
+          AND YEAR(s.join_date)=?
+          AND COALESCE(s.paid_fee, 0) > COALESCE(p.recorded_amount, 0)
+        ORDER BY s.join_date, s.id
+        `,
+        [year]
+      );
+      const [legacyYearRows] = await db.query(
+        `
+        SELECT DISTINCT YEAR(s.join_date) AS year
+        FROM students s
+        LEFT JOIN (
+          SELECT student_id, SUM(amount) AS recorded_amount
+          FROM student_payments
+          GROUP BY student_id
+        ) p ON p.student_id=s.id
+        WHERE s.join_date IS NOT NULL
+          AND YEAR(s.join_date) BETWEEN 1900 AND 9999
+          AND COALESCE(s.paid_fee, 0) > COALESCE(p.recorded_amount, 0)
+        ORDER BY year DESC
         `
       );
       const monthlyAmounts = Array(12).fill(0);
       rows.forEach((row) => {
         monthlyAmounts[Number(row.month) - 1] = amount(row.total);
       });
+      const legacyPayments = legacyRows.map((payment) => ({
+        id: `legacy-${payment.id}`,
+        studentId: payment.id,
+        studentCode: payment.studentCode,
+        studentName: payment.studentName,
+        mobile: payment.mobile,
+        city: payment.city,
+        category: payment.category,
+        course: payment.course,
+        joinDate: payment.joinDate,
+        paidDate: dateOnly(payment.paidDate),
+        totalFee: amount(payment.totalFee),
+        paidFee: amount(payment.paidFee),
+        balanceFee: amount(payment.balanceFee),
+        amount: amount(payment.amount),
+      }));
+      legacyPayments.forEach((payment) => {
+        const month = payment.paidDate
+          ? Number(payment.paidDate.slice(5, 7)) - 1
+          : -1;
+        if (month >= 0 && month < 12) {
+          monthlyAmounts[month] += payment.amount;
+        }
+      });
       const availableYears = [
         ...new Set([
           new Date().getFullYear(),
           ...yearRows.map((row) => Number(row.year)),
+          ...legacyYearRows.map((row) => Number(row.year)),
         ]),
       ].sort((a, b) => b - a);
 
@@ -3391,14 +3449,16 @@ app.get(
         year,
         monthlyAmounts,
         availableYears,
-        unrecordedPaidStudentCount: Number(unrecordedRows[0]?.count || 0),
-        payments: payments.map((payment) => ({
-          ...payment,
-          amount: amount(payment.amount),
-          totalFee: amount(payment.totalFee),
-          paidFee: amount(payment.paidFee),
-          balanceFee: amount(payment.balanceFee),
-        })),
+        payments: [
+          ...payments.map((payment) => ({
+            ...payment,
+            amount: amount(payment.amount),
+            totalFee: amount(payment.totalFee),
+            paidFee: amount(payment.paidFee),
+            balanceFee: amount(payment.balanceFee),
+          })),
+          ...legacyPayments,
+        ],
       });
     } catch (error) {
       next(error);
